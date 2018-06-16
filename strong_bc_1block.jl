@@ -10,6 +10,8 @@ function make_operators_dirchlet(p, Nx, Ny)
   Ax = kron(Hy_1d, Ax_1d)
   Ay = kron(Ay_1d, Hx_1d)
 
+  H  = kron(Hy_1d, Hx_1d)
+
   E0x_1d = sparse([     1], [     1], [1.], Nx + 1, Nx + 1)
   ENx_1d = sparse([Nx + 1], [Nx + 1], [1.], Nx + 1, Nx + 1)
   E0y_1d = sparse([     1], [     1], [1.], Ny + 1, Ny + 1)
@@ -24,15 +26,27 @@ function make_operators_dirchlet(p, Nx, Ny)
   x = kron(ones(Ny+1), rx_1d)
   y = kron(ry_1d, ones(Nx+1))
 
-  (Ax, Ay, In, Bn, x, y)
+  (Ax, Ay, H, In, Bn, x, y)
 end
 
 let
-  Nx = 30
-  Ny = 60
-  (Ax, Ay, In, Bn, x, y) = make_operators_dirchlet(10, Nx, Ny)
-  display(reshape(Bn * x, Nx+1, Ny+1))
-  display(reshape(Bn * y, Nx+1, Ny+1))
-  display(reshape(In' * x, Nx-1, Ny-1))
-  display(reshape(In' * y, Nx-1, Ny-1))
+  p = 4
+  for p = 2:2:10
+    for j = 0:3
+      Nx = 22 * 2^j
+      Ny = 22 * 2^j
+      (Ax, Ay, H, In, Bn, x, y) = make_operators_dirchlet(p, Nx, Ny)
+      A = Ax + Ay
+
+      ue = sin.(π * x) .* sinh.(π * y)
+
+      uhi = (In' * A * In) \ (-In' * (A * (Bn * ue)))
+
+      uh = (Bn * ue) + (In * uhi)
+
+      Δu = uh - ue
+      ϵ = sqrt(Δu' * H * Δu)
+      println((p, j, Nx, Ny, ϵ))
+    end
+  end
 end
