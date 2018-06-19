@@ -30,23 +30,25 @@ function make_operators_dirchlet(p, Nx, Ny)
 end
 
 let
-  p = 4
+  k = 2 * π
   for p = 2:2:10
-    for j = 0:3
-      Nx = 22 * 2^j
-      Ny = 22 * 2^j
+    ϵ=zeros(4)
+    for j = 1:length(ϵ)
+      Nx = 22 * 2^(j-1)
+      Ny = 22 * 2^(j-1)
       (Ax, Ay, H, In, Bn, x, y) = make_operators_dirchlet(p, Nx, Ny)
       A = Ax + Ay
 
-      ue = sin.(π * x) .* sinh.(π * y)
+      ue = sin.(k * x) .* sinh.(k * y)
 
       uhi = (In' * A * In) \ (-In' * (A * (Bn * ue)))
 
       uh = (Bn * ue) + (In * uhi)
 
       Δu = uh - ue
-      ϵ = sqrt(Δu' * H * Δu)
+      ϵ[j] = sqrt(Δu' * H * Δu)
       println((p, j, Nx, Ny, ϵ))
     end
+    println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
   end
 end
