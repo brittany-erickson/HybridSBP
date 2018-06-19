@@ -71,6 +71,7 @@ let
     # 1   1   2   2   3
     # |       |       |
     # 1---7---2--11---3
+
     # v: Vertices
     v = ((-1,-1), ( 0,-1), ( 1,-1),
          (-1, 0), ( 0, 0), ( 1, 0),
@@ -172,9 +173,9 @@ let
       ϵ[lvl] += Δu' * H[e] * Δu
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
-    println("level = ", lvl, " error = ", ϵ[lvl])
+    println("level = ", lvl, " :: error = ", ϵ[lvl])
   end
-  println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
+  println("rate = ", (log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
   println()
 
   nothing
