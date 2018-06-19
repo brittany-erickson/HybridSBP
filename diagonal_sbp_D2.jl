@@ -36,7 +36,7 @@ using LinearAlgebra
 #     doi = {10.1016/j.jcp.2013.07.013}
 #   }
 
-function diagonal_sbp_D2(p, N)
+function diagonal_sbp_D2(p, N; xc = (-1, 1))
 
   if p == 2
     bhinv = [2];
@@ -266,7 +266,8 @@ function diagonal_sbp_D2(p, N)
     error("Grid not big enough to support the operator. Grid must have N >= ", max(bn,2*bm))
   end
 
-  h = 2/N
+  h = (xc[2] - xc[1]) / N
+  @assert h > 0
   H_I = 1:M
   H_V = ones(M)
   H_V[1:bm] = bhinv[:]
@@ -294,7 +295,7 @@ function diagonal_sbp_D2(p, N)
               [1:length(BS);(N+2) .- (1:length(BS))],
               [BS[:];BS[:]]/h);
 
-  r = range(-1, stop=1, length=N+1)
+  r = range(xc[1], stop=xc[2], length=N+1)
 
   (D, BS, HI, H, r)
 
