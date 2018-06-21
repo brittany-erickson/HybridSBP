@@ -31,16 +31,16 @@ function locoperator(p, Nx, Ny, corners::NTuple{4, Tuple{T, T}}) where T <: Numb
 
   taux = 4/hx
   tauy = 4/hy
-  M = ((Ax - BSx - BSx' + taux * (E0x + ENx)) ⊗ Hy) +
-      (Hx ⊗ (Ay - BSy - BSy' + tauy * (E0y + ENy)))
-  B0x = ((-BSx' * e0x + taux * e0x) ⊗ Hy)
-  BNx = ((-BSx' * eNx + taux * eNx) ⊗ Hy)
-  B0y = (Hx ⊗ (-BSy' * e0y + tauy * e0y))
-  BNy = (Hx ⊗ (-BSy' * eNy + tauy * eNy))
+  M = (Hy ⊗ (Ax - BSx - BSx' + taux * (E0x + ENx))) +
+      ((Ay - BSy - BSy' + tauy * (E0y + ENy)) ⊗ Hx)
+  B0x = (Hy ⊗ (-BSx' * e0x + taux * e0x))
+  BNx = (Hy ⊗ (-BSx' * eNx + taux * eNx))
+  B0y = ((-BSy' * e0y + tauy * e0y) ⊗ Hx)
+  BNy = ((-BSy' * eNy + tauy * eNy) ⊗ Hx)
 
-  r = rx ⊗ ones(Ny + 1)
-  s = ones(Nx + 1) ⊗ ry
-  ((M, B0x, BNx, B0y, BNy), r, s, rx, ry, Hx ⊗ Hy)
+  r = ones(Ny + 1) ⊗ rx
+  s = ry ⊗ ones(Nx + 1)
+  ((M, B0x, BNx, B0y, BNy), r, s, rx, ry, Hy ⊗ Hx)
 end
 
 function localsolve(M, g0x, gNx, g0y, gNy)
@@ -71,7 +71,8 @@ let
     # Make sure we're positive definite and symmetric
     if lvl == 2
       (λ, V) = eigen(Matrix(lop[1]))
-      println((minimum(real.(λ)), maximum(real.(λ)), minimum(imag.(λ)), maximum(imag.(λ))))
+      println((minimum(real.(λ)), maximum(real.(λ)), minimum(imag.(λ)),
+               maximum(imag.(λ))))
       println(lop[1] ≈ lop[1]')
     end
 
