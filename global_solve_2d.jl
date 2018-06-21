@@ -59,7 +59,7 @@ function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet)
         error("interface not implemented")
       elseif FToB[gf] == 1
         drng = FToDirchletOffset[gf]:(FToDirchletOffset[gf+1]-1)
-        b[erng] = -lop[e][1][lf+1] * Dirichlet[drng]
+        b[erng] += lop[e][1][lf+1] * Dirichlet[drng]
       else
         error("BC not implemented")
       end
