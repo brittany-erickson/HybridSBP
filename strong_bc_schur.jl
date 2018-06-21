@@ -156,6 +156,8 @@ let
     end
     @assert !maximum(isnan.(xtrace)) && !maximum(isnan.(ytrace))
 
+    #=
+    #{{{ Solve the problem with exact Dirichlet on the trace
     uexact = (x,y) -> sin.(π * x) .* sinh.(π * y)
     utrace = uexact(xtrace, ytrace)
     ϵ[lvl] = 0
@@ -174,6 +176,8 @@ let
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
     println("level = ", lvl, " :: error = ", ϵ[lvl])
+    #}}}
+    =#
   end
   println("rate = ", (log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
   println()
