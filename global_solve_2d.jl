@@ -39,14 +39,19 @@ function locoperator(p, Nx, Ny, τ1, τ2, τ3, τ4,
 
   r = ones(Ny + 1) ⊗ rx
   s = ry ⊗ ones(Nx + 1)
+  N1 = [-ones(Ny+1) zeros(Ny+1)]
+  N2 = [ ones(Ny+1) zeros(Ny+1)]
+  N3 = [zeros(Nx+1) -ones(Nx+1)]
+  N4 = [zeros(Nx+1)  ones(Nx+1)]
   # M           << interior Dirchlet Matrix
   # B[1-4]      << Boundary Dirchlet Matrices
   # τ[1-4]H[xy] << Scaling matrices for λ in penalty equation
-  ((M, B1, B2, B3, B4, τ1 * Hy, τ2 * Hy, τ3 * Hx, τ4 * Hx), r, s, rx, ry, Hy ⊗ Hx)
+  ((M, B1, B2, B3, B4, τ1 * Hy, τ2 * Hy, τ3 * Hx, τ4 * Hx),
+   r, s, rx, ry, Hy ⊗ Hx, (N1, N2, N3, N4))
 end
 
-function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet,
-                    FToτ)
+function glooperator(lop, FToλOffset, FToDirchletOffset, FToNeumannOffset,
+                     EToF, FToB, Dirichlet, Neumann, FToτ)
   M = sparse(Array{typeof(lop[1][1][1][1]),2}(undef, 0, 0))
   # Set up the block diagonal volume terms
   nelem = length(lop)
@@ -66,7 +71,6 @@ function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet,
     Npe[e] = length(lop[e][2])
     Npu += Npe[e]
   end
-  M = sparse(IM, JM, VM, Npu, Npu)
   @assert Npu == sum(Npe)
 
   # Set up the boundary and interface terms
@@ -84,8 +88,9 @@ function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet,
 
     for lf = 1:nlfaces
       gf = EToF[lf, e]
+      Bf = lop[e][1][lf+1]
       if FToB[gf] == 0
-        Bf = lop[e][1][lf+1]
+        # update Lambda matrix
         (Ie, Je, Ve) = findnz(Bf)
         Ie .+= (glo_elm_rng[1]-1)
         Je .+= (FToλOffset[gf]-1)
@@ -96,15 +101,33 @@ function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet,
         λrng = FToλOffset[gf]:FToλOffset[gf+1]-1
         ID = [ID;λrng]
         JD = [JD;λrng]
-        VD = [VD;Vector(diag(lop[e][1][lf+5]))]
+        H = Vector(diag(lop[e][1][lf+5]))
+        VD = [VD;H]
       elseif FToB[gf] == 1
+        # update RHS matrix
         drng = FToDirchletOffset[gf]:(FToDirchletOffset[gf+1]-1)
-        bM[glo_elm_rng] += lop[e][1][lf+1] * Dirichlet[drng]
+        bM[glo_elm_rng] += Bf * Dirichlet[drng]
+      elseif FToB[gf] == 2
+        # update volume matrix
+        H = Vector(diag(lop[e][1][lf+5]))
+        HI = sparse(1:length(H), 1:length(H), 1 ./ H[:])
+        (Ie, Je, Ve) = findnz(Bf*HI*Bf')
+        Ie .+= (glo_elm_rng[1]-1)
+        Je .+= (glo_elm_rng[1]-1)
+        IM = [IM; Ie];
+        JM = [JM; Je];
+        VM = [VM; -Ve];
+
+        # TODO: Allow for Neumann data
+        nrng = FToNeumannOffset[gf]:(FToNeumannOffset[gf+1]-1)
+        bM[glo_elm_rng] += Bf * Neumann[nrng] ./ FToτ[gf]
       else
         error("BC = ", FToB[gf]," not implemented")
       end
     end
   end
+
+  M = sparse(IM, JM, VM, Npu, Npu)
   L = sparse(IL, JL, VL, Npu, Npλ)
   D = sparse(ID, JD, VD, Npλ, Npλ)
   bλ = zeros(Npλ)
@@ -138,9 +161,9 @@ let
   # 1---7---2--11---3
 
   # verts: Vertices
-  verts = ((-1,-1), ( 0,-1), ( 1,-1),
-       (-1, 0), ( 0, 0), ( 1, 0),
-       (-1, 1), ( 0, 1), ( 1, 1))
+  verts = ((-1, 0), ( 0, 0), ( 1, 0),
+           (-1, 1), ( 0, 1), ( 1, 1),
+           (-1, 2), ( 0, 2), ( 1, 2))
 
   # EToV: Element to Vertices
   EToV = ((1, 2, 4, 5), (2, 3,  5,  6), (4, 5, 7, 8), (5, 6,  8,  9))
@@ -154,8 +177,10 @@ let
   # FToB: Unique Global Face to Boundary Conditions
   #       0 = internal face
   #       1 = Dirichlet
-  #       2 = Neumann (not supported yet)
-  FToB = (1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1)
+  #       2 = Neumann
+  # FToB = (1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1)
+  FToB = (1, 0, 1, 1, 0, 1, 2, 0, 2, 2, 0, 2)
+  # FToB = (1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1)
   # FToB = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
 
   # number of elements
@@ -263,40 +288,63 @@ let
     @assert !maximum(isnan.(xtrace)) && !maximum(isnan.(ytrace))
 
     #{{{ Set up known Dirchlet Trace
-    uexact = (x,y) -> cos.(π * x) .* cosh.(π * y)
-    utrace = uexact(xtrace, ytrace)
     TraceToλ = Array{Int64, 1}()
     TraceToDirchlet = Array{Int64, 1}()
+    TraceToNeumann = Array{Int64, 1}()
     FToλOffset = ones(Int64, length(FToB)+1)
     FToDirchletOffset = ones(Int64, length(FToB)+1)
+    FToNeumannOffset = ones(Int64, length(FToB)+1)
     for gf = 1:length(FToB)
-      if FToB[gf] != 1
+      FToλOffset[gf+1] = FToλOffset[gf]
+      FToDirchletOffset[gf+1] = FToDirchletOffset[gf]
+      FToNeumannOffset[gf+1] = FToNeumannOffset[gf]
+      if FToB[gf] == 1
+        TraceToDirchlet = [TraceToDirchlet;FToTraceOffset[gf]:(FToTraceOffset[gf+1]-1)]
+        FToDirchletOffset[gf+1] = FToDirchletOffset[gf] + FToNp[gf]
+      elseif FToB[gf] == 2
+        TraceToNeumann = [TraceToNeumann;FToTraceOffset[gf]:(FToTraceOffset[gf+1]-1)]
+        FToNeumannOffset[gf+1] = FToNeumannOffset[gf] + FToNp[gf]
+      else
         TraceToλ = [TraceToλ;FToTraceOffset[gf]:(FToTraceOffset[gf+1]-1)]
         FToλOffset[gf+1] = FToλOffset[gf] + FToNp[gf]
-        FToDirchletOffset[gf+1] = FToDirchletOffset[gf]
-      else
-        TraceToDirchlet = [TraceToDirchlet;FToTraceOffset[gf]:(FToTraceOffset[gf+1]-1)]
-        FToλOffset[gf+1] = FToλOffset[gf]
-        FToDirchletOffset[gf+1] = FToDirchletOffset[gf] + FToNp[gf]
       end
     end
-    # utrace[TraceToλ] .= 0
     #}}}
 
-    (M, bM, L, D, bλ) = glooperator(lop, FToλOffset, FToDirchletOffset, EToF,
-                                    FToB, utrace[TraceToDirchlet], FToτ)
+    v   = (x,y) ->      cos.(π * x) .* cosh.(π * y)
+    v_x = (x,y) -> -π * sin.(π * x) .* cosh.(π * y)
+    v_y = (x,y) ->  π * cos.(π * x) .* sinh.(π * y)
+    neumann_bc = fill(NaN, FToNeumannOffset[end]-1)
+    for e = 1:nelem
+      for lf = 1:nlfaces
+        gf = EToF[lf, e]
+        if FToB[gf] == 2
+          @assert isnan(neumann_bc[FToNeumannOffset[gf]])
+          nrng = FToNeumannOffset[gf]:(FToNeumannOffset[gf+1]-1)
+          trng = TraceToNeumann[nrng]
+          xn = xtrace[trng]
+          yn = ytrace[trng]
+          N = lop[e][7][lf]
+          neumann_bc[nrng] = (N[:,1] .* v_x(xn, yn) + N[:, 2] .* v_y(xn, yn))
+        end
+      end
+    end
+    @assert !maximum(isnan.(neumann_bc))
+    dirchlet_bc = v(xtrace[TraceToDirchlet], ytrace[TraceToDirchlet])
+    (M, bM, L, D, bλ) = glooperator(lop, FToλOffset, FToDirchletOffset,
+                                    FToNeumannOffset, EToF, FToB, dirchlet_bc,
+                                    neumann_bc, FToτ)
 
     #{{{ Solve the global problem
     ϵ[lvl] = 0
     EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
-    utrace_λ = M \ bM
     utrace_λ = [M L;L' D] \ [bM;bλ]
     for e = 1:nelem
       locrng = EToOffset[e]:EToOffset[e+1]-1
       ul = utrace_λ[locrng]
 
       (xe, ye, He) = (lop[e][2], lop[e][3], lop[e][6])
-      Δu = ul - uexact(xe, ye)
+      Δu = ul - v(xe, ye)
       ϵ[lvl] += Δu' * He * Δu
     end
     #}}}
@@ -319,8 +367,7 @@ let
       xe = lop[e][2]
       ye = lop[e][3]
       He  = lop[e][6]
-      Δu = u - uexact(xe, ye)
-      Δu = u - uexact(xe, ye)
+      Δu = u - v(xe, ye)
       ϵ[lvl] += Δu' * He * Δu
     end
     #}}}
