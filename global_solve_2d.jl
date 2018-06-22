@@ -39,39 +39,80 @@ function locoperator(p, Nx, Ny, τ1, τ2, τ3, τ4,
 
   r = ones(Ny + 1) ⊗ rx
   s = ry ⊗ ones(Nx + 1)
-  ((M, B1, B2, B3, B4), r, s, rx, ry, Hy ⊗ Hx)
+  # M           << interior Dirchlet Matrix
+  # B[1-4]      << Boundary Dirchlet Matrices
+  # τ[1-4]H[xy] << Scaling matrices for λ in penalty equation
+  ((M, B1, B2, B3, B4, τ1 * Hy, τ2 * Hy, τ3 * Hx, τ4 * Hx), r, s, rx, ry, Hy ⊗ Hx)
 end
 
-function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet)
+function glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB, Dirichlet,
+                    FToτ)
   M = sparse(Array{typeof(lop[1][1][1][1]),2}(undef, 0, 0))
-  for e = 1:length(lop)
-    M = cat(M, lop[e][1][1], dims = (1,2))
-  end
+  # Set up the block diagonal volume terms
+  nelem = length(lop)
+  Npλ = FToλOffset[end]-1
+  Npe = zeros(Int64, nelem)
+  IM = Array{Int64,1}(undef,0)
+  JM = Array{Int64,1}(undef,0)
+  VM = Array{typeof(lop[1][1][1][1]),1}(undef,0)
+  Npu = 0
+  for e = 1:nelem
+    Me = lop[e][1][1]
+    (Ie, Je, Ve) = findnz(Me)
+    IM = [IM;Ie .+ Npu]
+    JM = [JM;Je .+ Npu]
+    VM = [VM;Ve]
 
+    Npe[e] = length(lop[e][2])
+    Npu += Npe[e]
+  end
+  M = sparse(IM, JM, VM, Npu, Npu)
+  @assert Npu == sum(Npe)
+
+  # Set up the boundary and interface terms
   nlfaces = 4
-  b = zeros(size(M,1)+FToλOffset[end]-1)
-  st = 1
-  for e = 1:length(lop)
-    erng = (st-1) .+ (1:length(lop[e][2]))
+  bM = zeros(Npu)
+  glo_elm_rng = 0:0
+  IL = Array{Int64,1}(undef,0)
+  JL = Array{Int64,1}(undef,0)
+  VL = Array{typeof(lop[1][1][1][1]),1}(undef,0)
+  ID = Array{Int64,1}(undef,0)
+  JD = Array{Int64,1}(undef,0)
+  VD = Array{typeof(lop[1][1][1][1]),1}(undef,0)
+  for e = 1:nelem
+    glo_elm_rng = glo_elm_rng[end] .+ (1:Npe[e])
+
     for lf = 1:nlfaces
       gf = EToF[lf, e]
       if FToB[gf] == 0
-        error("interface not implemented")
+        Bf = lop[e][1][lf+1]
+        (Ie, Je, Ve) = findnz(Bf)
+        Ie .+= (glo_elm_rng[1]-1)
+        Je .+= (FToλOffset[gf]-1)
+        IL = [IL;Ie]
+        JL = [JL;Je]
+        VL = [VL;-Ve]
+
+        λrng = FToλOffset[gf]:FToλOffset[gf+1]-1
+        ID = [ID;λrng]
+        JD = [JD;λrng]
+        VD = [VD;Vector(diag(lop[e][1][lf+5]))]
       elseif FToB[gf] == 1
         drng = FToDirchletOffset[gf]:(FToDirchletOffset[gf+1]-1)
-        b[erng] += lop[e][1][lf+1] * Dirichlet[drng]
+        bM[glo_elm_rng] += lop[e][1][lf+1] * Dirichlet[drng]
       else
-        error("BC not implemented")
+        error("BC = ", FToB[gf]," not implemented")
       end
     end
-    st = erng[end]+1
   end
-
-  (M, b)
+  L = sparse(IL, JL, VL, Npu, Npλ)
+  D = sparse(ID, JD, VD, Npλ, Npλ)
+  bλ = zeros(Npλ)
+  (M, bM, L, D, bλ)
 end
 
 function localsolve(M, g1, g2, g3, g4)
-  localsolve(M..., g1, g2, g3, g4)
+  localsolve(M[1], M[2], M[3], M[4], M[5], g1, g2, g3, g4)
 end
 
 function localsolve(M, B1, B2, B3, B4, g1, g2, g3, g4)
@@ -114,8 +155,8 @@ let
   #       0 = internal face
   #       1 = Dirichlet
   #       2 = Neumann (not supported yet)
-  # FToB = (1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1)
-  FToB = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+  FToB = (1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1)
+  # FToB = (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
 
   # number of elements
   nelem = length(EToV)
@@ -242,20 +283,19 @@ let
     # utrace[TraceToλ] .= 0
     #}}}
 
-    (M, b) = glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB,
-                utrace[TraceToDirchlet])
+    (M, bM, L, D, bλ) = glooperator(lop, FToλOffset, FToDirchletOffset, EToF,
+                                    FToB, utrace[TraceToDirchlet], FToτ)
 
     #{{{ Solve the global problem
     ϵ[lvl] = 0
     EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
-    utrace_λ = M \ b
+    utrace_λ = M \ bM
+    utrace_λ = [M L;L' D] \ [bM;bλ]
     for e = 1:nelem
       locrng = EToOffset[e]:EToOffset[e+1]-1
       ul = utrace_λ[locrng]
 
-      xe = lop[e][2]
-      ye = lop[e][3]
-      He  = lop[e][6]
+      (xe, ye, He) = (lop[e][2], lop[e][3], lop[e][6])
       Δu = ul - uexact(xe, ye)
       ϵ[lvl] += Δu' * He * Δu
     end
