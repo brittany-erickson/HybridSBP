@@ -245,10 +245,25 @@ let
     (M, b) = glooperator(lop, FToλOffset, FToDirchletOffset, EToF, FToB,
                 utrace[TraceToDirchlet])
 
+    #{{{ Solve the global problem
+    ϵ[lvl] = 0
+    EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
+    utrace_λ = M \ b
+    for e = 1:nelem
+      locrng = EToOffset[e]:EToOffset[e+1]-1
+      ul = utrace_λ[locrng]
+
+      xe = lop[e][2]
+      ye = lop[e][3]
+      He  = lop[e][6]
+      Δu = ul - uexact(xe, ye)
+      ϵ[lvl] += Δu' * He * Δu
+    end
+    #}}}
+
+    #=
     #{{{ Solve the local problems from known trace
     ϵ[lvl] = 0
-    ut = M \ b
-    st = 1
     for e = 1:nelem
       # Dirichlet boundary conditions
       (gf1, gf2, gf3, gf4) = EToF[:, e]
@@ -263,17 +278,16 @@ let
       # Check the error
       xe = lop[e][2]
       ye = lop[e][3]
-      H  = lop[e][6]
+      He  = lop[e][6]
       Δu = u - uexact(xe, ye)
       Δu = u - uexact(xe, ye)
-      ϵ[lvl] += Δu' * H * Δu
-      println(ut[(st-1) .+ (1:(EToN[1,e]+1) * (EToN[2,e]+1))] ≈ u)
-      st += (EToN[1,e]+1) * (EToN[2,e]+1)
+      ϵ[lvl] += Δu' * He * Δu
     end
+    #}}}
+    =#
 
     ϵ[lvl] = sqrt(ϵ[lvl])
     println("level = ", lvl, " :: error = ", ϵ[lvl])
-    #}}}
   end
 
 
