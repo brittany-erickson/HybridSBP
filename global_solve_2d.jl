@@ -117,9 +117,9 @@ function glooperator(lop,
         if FToB[gf] == -1
           δrng = FToδOffset[gf]:FToδOffset[gf+1]-1
           if EToS[e, lf] == 1
-            bM[glo_elm_rng] += Bf * δ[δrng]
+            bM[glo_elm_rng] -= Bf * δ[δrng] / 2
           else
-            bM[glo_elm_rng] -= Bf * δ[δrng]
+            bM[glo_elm_rng] += Bf * δ[δrng] / 2
           end
         end
       elseif FToB[gf] == 1
