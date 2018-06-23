@@ -1,6 +1,13 @@
 include("diagonal_sbp_D2.jl")
 using Compat.SparseArrays
 
+
+const do_plot = true
+if do_plot
+  using Plots
+  pyplot()
+end
+
 ⊗ = (A,B) -> kron(A, B)
 
 function locoperator(p, Nx, Ny, τ1, τ2, τ3, τ4,
@@ -391,6 +398,10 @@ let
     #{{{ Check the error
     ϵ[lvl] = 0
     EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
+    if do_plot
+      l = @layout grid(2,1)
+    end
+
     for e = 1:nelem
       locrng = EToOffset[e]:EToOffset[e+1]-1
       ul = utrace_λ[locrng]
@@ -398,6 +409,18 @@ let
       (xe, ye, He) = (lop[e][2], lop[e][3], lop[e][6])
       Δu = ul - v(xe, ye, e)
       ϵ[lvl] += Δu' * He * Δu
+      if do_plot
+        if e == 1
+          plot(xe, ye, [ul, v(xe, ye, e)], st = [:surface, :surface], layout=l)
+        else
+          plot!(xe, ye, [ul, v(xe, ye, e)], st = [:surface, :surface], layout=l)
+        end
+      end
+
+    end
+    if do_plot
+      display(plot!())
+      return
     end
     #}}}
 
