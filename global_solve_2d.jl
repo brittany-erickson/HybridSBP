@@ -1,5 +1,5 @@
 include("diagonal_sbp_D2.jl")
-using SparseArrays
+using Compat.SparseArrays
 
 ⊗ = (A,B) -> kron(A, B)
 

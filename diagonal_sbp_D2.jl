@@ -1,5 +1,6 @@
-using SparseArrays
-using LinearAlgebra
+import Compat: range, undef
+using Compat.SparseArrays
+using Compat.LinearAlgebra
 # DIAGONAL_SBP_D2 creates a diagonal norm SBP operator for the 2nd drerivative
 # (D, BS, Hinv, H) = diagonal_sbp_D2(p,N)
 #
@@ -295,7 +296,7 @@ function diagonal_sbp_D2(p, N; xc = (-1, 1))
               [1:length(BS);(N+2) .- (1:length(BS))],
               [BS[:];BS[:]]/h);
 
-  r = range(xc[1], stop=xc[2], length=N+1)
+  r = Compat.range(xc[1], stop=xc[2], length=N+1)
 
   (D, BS, HI, H, r)
 
