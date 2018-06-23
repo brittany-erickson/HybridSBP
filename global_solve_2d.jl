@@ -343,7 +343,7 @@ let
     #}}}
 
     #{{{ Set up the BCs
-    v   = (x,y,e) ->      cos.(π * x) .* cosh.(π * y) .+ mod(e, 2)
+    v   = (x,y,e) ->      cos.(π * x) .* cosh.(π * y) .+ 10 * mod(e, 2)
     v_x = (x,y,e) -> -π * sin.(π * x) .* cosh.(π * y)
     v_y = (x,y,e) ->  π * cos.(π * x) .* sinh.(π * y)
     # Neumann
