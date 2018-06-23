@@ -186,7 +186,7 @@ let
   EToO = ((0, 0, 0, 0), (0, 0,  0,  0), (0, 0, 0, 0), (0, 0,  0,  0))
 
   # EToS: Element to Unique Global Face Side
-  EToS = ((1, 1, 1, 1), (2, 1, 1, 1), (1, 1, 2, 1), (2, 1, 1, 1))
+  EToS = ((1, 1, 1, 1), (2, 1, 1, 1), (1, 1, 2, 1), (2, 1, 2, 1))
 
   # FToB: Unique Global Face to Boundary Conditions
   #      -1 = Jumps
@@ -342,7 +342,7 @@ let
     # Neumann
     neumann_bc = fill(NaN, FToNeumannOffset[end]-1)
     dirichlet_bc = fill(NaN, FToDirichletOffset[end]-1)
-    δ = fill(0.0, FToDirichletOffset[end]-1)
+    δ = fill(0.0, FToδOffset[end]-1)
     for e = 1:nelem
       for lf = 1:nlfaces
         gf = EToF[lf, e]
