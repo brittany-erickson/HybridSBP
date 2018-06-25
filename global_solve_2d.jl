@@ -2,8 +2,8 @@ include("diagonal_sbp_D2.jl")
 using Compat.SparseArrays
 
 
-const do_plot = true
-if do_plot
+do_plot = 2
+if do_plot > 0
   using Plots
   pyplot()
 end
@@ -115,8 +115,8 @@ function glooperator(lop,
         VD = [VD;H]
 
         if FToB[gf] == -1
-          δrng = FToδOffset[gf]:FToδOffset[gf+1]-1
-          if EToS[e, lf] == 1
+          δrng = FToδOffset[gf]:(FToδOffset[gf+1]-1)
+          if EToS[lf, e] == 1
             bM[glo_elm_rng] -= Bf * δ[δrng] / 2
           else
             bM[glo_elm_rng] += Bf * δ[δrng] / 2
@@ -343,9 +343,10 @@ let
     #}}}
 
     #{{{ Set up the BCs
-    v   = (x,y,e) ->      cos.(π * x) .* cosh.(π * y) .+ 10 * mod(e, 2)
-    v_x = (x,y,e) -> -π * sin.(π * x) .* cosh.(π * y)
-    v_y = (x,y,e) ->  π * cos.(π * x) .* sinh.(π * y)
+    (kx, ky) = (π, π)
+    v   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y) * (1 - 2 * mod(e, 2))
+    v_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y) * (1 - 2 * mod(e, 2))
+    v_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y) * (1 - 2 * mod(e, 2))
     # Neumann
     neumann_bc = fill(NaN, FToNeumannOffset[end]-1)
     dirichlet_bc = fill(NaN, FToDirichletOffset[end]-1)
@@ -398,7 +399,7 @@ let
     #{{{ Check the error
     ϵ[lvl] = 0
     EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
-    if do_plot
+    if do_plot == lvl
       l = @layout grid(2,1)
     end
 
@@ -409,7 +410,7 @@ let
       (xe, ye, He) = (lop[e][2], lop[e][3], lop[e][6])
       Δu = ul - v(xe, ye, e)
       ϵ[lvl] += Δu' * He * Δu
-      if do_plot
+      if do_plot == lvl
         if e == 1
           plot(xe, ye, [ul, v(xe, ye, e)], st = [:surface, :surface], layout=l)
         else
@@ -418,9 +419,8 @@ let
       end
 
     end
-    if do_plot
+    if do_plot == lvl
       display(plot!())
-      return
     end
     #}}}
 
