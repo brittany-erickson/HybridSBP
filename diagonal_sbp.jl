@@ -55,7 +55,6 @@ using Compat.LinearAlgebra
 #   }
 #{{{
 function diagonal_sbp_D1(p, N; xc = (-1, 1))
-  M = N+1
 
   if p == 2
     bhinv = [2]
@@ -112,31 +111,32 @@ function diagonal_sbp_D1(p, N; xc = (-1, 1))
   end
 
   (bm, bn) = size(bd);
+  Np = N+1
 
-  if(M < 2*bm || M < bn)
+  if(Np < 2*bm || Np < bn)
     error("Grid not big enough to support the operator. Grid must have N >= ", max(bn,2*bm))
   end
 
   h = (xc[2] - xc[1]) / N
   @assert h > 0
-  H_I = 1:M
-  H_V = ones(M)
+  H_I = 1:Np
+  H_V = ones(Np)
   H_V[1:bm] = 1 ./ bhinv[:]
-  H_V[M-bm+1:M] = 1 ./ bhinv[end:-1:1]
+  H_V[Np-bm+1:Np] = 1 ./ bhinv[end:-1:1]
   H = sparse(H_I, H_I, h * H_V)
   HI = sparse(H_I, H_I, 1 ./ (h * H_V))
 
   n = floor(Int64, length(d)/2);
-  B_I1 = (bm+1:M-bm) * ones(1,p+1)
-  B_J1 = ones(M-2bm,1) * (-div(p,2):div(p,2))' + B_I1
-  B_V1 = ones(M-2bm)
+  B_I1 = (bm+1:Np-bm) * ones(1,p+1)
+  B_J1 = ones(Np-2bm,1) * (-div(p,2):div(p,2))' + B_I1
+  B_V1 = ones(Np-2bm)
   B_V1 = kron(B_V1, d)
 
   B_I2 = (1:bm) * ones(1, bn)
   B_J2 = ones(bm) * (1:bn)'
   B_V2 = bd
-  B_I3 = (M+1) .- B_I2
-  B_J3 = (M+1) .- B_J2
+  B_I3 = (Np+1) .- B_I2
+  B_J3 = (Np+1) .- B_J2
   B_V3 = -B_V2
   D = sparse([B_I1[:];B_I2[:];B_I3[:]],
              [B_J1[:];B_J2[:];B_J3[:]],
@@ -453,4 +453,103 @@ function diagonal_sbp_D2(p, N; xc = (-1, 1))
 end
 #}}}
 
+#VARIABLE_DIAGONAL_SBP_D2 creates a diagonal norm SBP operator for the 2nd
+# derivative with variable coefficients, e.g., approximates ∂/∂r( b(r) ∂u/∂r)
+#
+# (D, BS, Hinv, H, r) = variable_diagonal_sbp_D2(p, N, B; xc = (-1,1))
+#{{{
+function variable_diagonal_sbp_D2(p, N, B; xc = (-1, 1))
+  r = Compat.range(xc[1], stop=xc[2], length=N+1)
+  variable_diagonal_sbp_D2(p, N, B(r);xc=xc)
 end
+function variable_diagonal_sbp_D2(p, N, B::T; xc = (-1, 1)) where T <: Number
+  variable_diagonal_sbp_D2(p, N, B*ones(N+1);xc=xc)
+end
+
+function variable_diagonal_sbp_D2(p, N, B::Array{Float64,1}; xc = (-1, 1))
+  @assert length(B) == N+1
+
+  if p == 2
+    bhinv = [2];
+
+    I_M0 = [1]
+    J_M0 = [1]
+    V_M0 = [(B[1]+B[2])/2]
+
+    I_MN = [N+1]
+    J_MN = [N+1]
+    V_MN = [(B[N]+B[N+1])/2]
+
+    I_M = [2:N+1;
+           2:N  ;
+           1:N  ]
+    J_M = [1:N  ;
+           2:N  ;
+           2:N+1]
+    V_M = [-(B[1:N  ]+B[2:N+1])/2;
+            (B[1:N-1]+2B[2:N]+B[3:N+1])/2;
+           -(B[1:N  ]+B[2:N+1])/2];
+    M = sparse([I_M0;I_M;I_MN], [J_M0;J_M;J_MN], [V_M0;V_M;V_MN])
+
+    BS = [3/2 -2 1/2];
+  elseif p == 4
+    bhinv = [48/17 48/59 48/43 48/49];
+
+    BS = [11/6 -3 3/2 -1/3];
+
+    V_M0 = zeros(6,6)
+
+    (b1,b2,b3,b4,b5,b6,b7,b8) = B[1:8]
+    V_M0[1, 1] =                (12/17)b1 + (59/192)b2 + (27010400129/345067064608)b3 + (69462376031/2070402387648)b4
+    V_M0[1, 2] = V_M0[2, 1] = - (59/68)b1 - (6025413881/21126554976)b3 - (537416663/7042184992)b4
+    V_M0[1, 3] = V_M0[3, 1] =   (2/17)b1 - (59/192)b2 + (213318005/16049630912)b4 + (2083938599/8024815456)b3
+    V_M0[1, 4] = V_M0[4, 1] =   (3/68)b1 - (1244724001/21126554976)b3 + (752806667/21126554976)b4
+    V_M0[1, 5] = V_M0[5, 1] =   (49579087/10149031312)b3 - (49579087/10149031312)b4
+    V_M0[1, 6] = V_M0[6, 1] = - (1/784)b4 + (1/784)b3
+    V_M0[2, 2] =                (3481/3264)b1 + (9258282831623875/7669235228057664)b3 + (236024329996203/1278205871342944)b4
+    V_M0[2, 3] = V_M0[3, 2] = - (59/408)b1 - (29294615794607/29725717938208)b3 - (2944673881023/29725717938208)b4
+    V_M0[2, 4] = V_M0[4, 2] = - (59/1088)b1 + (260297319232891/2556411742685888)b3 - (60834186813841/1278205871342944)b4
+    V_M0[2, 5] = V_M0[5, 2] = - (1328188692663/37594290333616)b3 + (1328188692663/37594290333616)b4
+    V_M0[2, 6] = V_M0[6, 2] = - (8673/2904112)b3 + (8673/2904112)b4
+    V_M0[3, 3] =                (1/51)b1 + (59/192)b2 + (13777050223300597/26218083221499456)b4 + (564461/13384296)b5 + (378288882302546512209/270764341349677687456)b3
+    V_M0[3, 4] = V_M0[4, 3] =   (1/136)b1 - (125059/743572)b5 - (4836340090442187227/5525802884687299744)b3 - (17220493277981/89177153814624)b4
+    V_M0[3, 5] = V_M0[5, 3] = - (10532412077335/42840005263888)b4 + (1613976761032884305/7963657098519931984)b3 + (564461/4461432)b5
+    V_M0[3, 6] = V_M0[6, 3] = - (960119/1280713392)b4 - (3391/6692148)b5 + (33235054191/26452850508784)b3
+    V_M0[4, 4] =                (3/1088)b1 + (507284006600757858213/475219048083107777984)b3 + (1869103/2230716)b5 + (1/24)b6 + (1950062198436997/3834617614028832)b4
+    V_M0[4, 5] = V_M0[5, 4] = - (4959271814984644613/20965546238960637264)b3 - (1/6)b6 - (15998714909649/37594290333616)b4 - (375177/743572)b5
+    V_M0[4, 6] = V_M0[6, 4] = - (368395/2230716)b5 + (752806667/539854092016)b3 + (1063649/8712336)b4 + (1/8)b6
+    V_M0[5, 5] =                (8386761355510099813/128413970713633903242)b3 + (2224717261773437/2763180339520776)b4 + (5/6)b6 + (1/24)b7 + (280535/371786)b5
+    V_M0[5, 6] = V_M0[6, 5] = - (35039615/213452232)b4 - (1/6)b7 - (13091810925/13226425254392)b3 - (1118749/2230716)b5 - (1/2)b6
+    V_M0[6, 6] =                (3290636/80044587)b4 + (5580181/6692148)b5 + (5/6)b7 + (1/24)b8 + (660204843/13226425254392)b3 + (3/4)b6
+
+  else
+    error(string("Operators for order ", p, " are not implemented"))
+  end
+
+  bm = length(bhinv)
+  Np = N+1
+
+  if(Np < 2*bm)
+    error("Grid not big enough to support the operator. Grid must have N >= ", max(bn,2*bm))
+  end
+
+  h = (xc[2] - xc[1]) / N
+  @assert h > 0
+  H_I = 1:Np
+  H_V = ones(Np)
+  H_V[1:bm] = bhinv[:]
+  H_V[Np-bm+1:Np] = bhinv[end:-1:1]
+  HI = sparse(H_I, H_I, H_V / h)
+  H  = sparse(H_I, H_I, h ./ H_V)
+
+  S0 = sparse(ones(length(BS)), 1:length(BS), -BS[:]/h, N+1, N+1);
+  SN = sparse((N+1) * ones(length(BS)), (N+1):-1:(N+2-length(BS)),
+              BS[:]/h, N+1, N+1);
+  D = HI * (-M + SN - S0)
+
+  r = Compat.range(xc[1], stop=xc[2], length=N+1)
+
+  (D, S0, SN, HI, H, M, r)
+
+end
+#}}}
