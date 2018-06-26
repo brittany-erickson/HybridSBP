@@ -2,11 +2,13 @@ include("diagonal_sbp.jl")
 using Compat.SparseArrays
 
 
+#=
 do_plot = 2
 if do_plot > 0
   using Plots
   pyplot()
 end
+=#
 
 ⊗ = (A,B) -> kron(A, B)
 
@@ -15,10 +17,12 @@ function locoperator(p, Nx, Ny, τ1, τ2, τ3, τ4,
   @assert (corners[1][1], corners[2][1]) == (corners[3][1], corners[4][1])
   @assert (corners[1][2], corners[3][2]) == (corners[2][2], corners[4][2])
 
-  (D2x, BSx, HIx, Hx, rx) = diagonal_sbp_D2(p, Nx; xc = (corners[1][1],
-                                                         corners[4][1]))
-  (D2y, BSy, HIy, Hy, ry) = diagonal_sbp_D2(p, Ny; xc = (corners[1][2],
-                                                         corners[4][2]))
+  (D2x, S0x, SNx, HIx, Hx, rx) = diagonal_sbp_D2(p, Nx; xc = (corners[1][1],
+                                                              corners[4][1]))
+  (D2y, S0y, SNy, HIy, Hy, ry) = diagonal_sbp_D2(p, Ny; xc = (corners[1][2],
+                                                              corners[4][2]))
+  BSx = SNx - S0x
+  BSy = SNy - S0y
 
   Ax = BSx - Hx* D2x
   Ay = BSy - Hy* D2y
@@ -399,9 +403,11 @@ let
     #{{{ Check the error
     ϵ[lvl] = 0
     EToOffset = accumulate(+, [1; (EToN[1,:].+1).*(EToN[2,:].+1)])
+    #=
     if do_plot == lvl
       l = @layout grid(2,1)
     end
+    =#
 
     for e = 1:nelem
       locrng = EToOffset[e]:EToOffset[e+1]-1
@@ -410,6 +416,7 @@ let
       (xe, ye, He) = (lop[e][2], lop[e][3], lop[e][6])
       Δu = ul - v(xe, ye, e)
       ϵ[lvl] += Δu' * He * Δu
+      #=
       if do_plot == lvl
         if e == 1
           plot(xe, ye, [ul, v(xe, ye, e)], st = [:surface, :surface], layout=l)
@@ -417,11 +424,14 @@ let
           plot!(xe, ye, [ul, v(xe, ye, e)], st = [:surface, :surface], layout=l)
         end
       end
+      =#
 
     end
+    #=
     if do_plot == lvl
       display(plot!())
     end
+    =#
     #}}}
 
     #=
