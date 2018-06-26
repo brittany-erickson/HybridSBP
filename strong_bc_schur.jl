@@ -1,4 +1,4 @@
-include("diagonal_sbp_D2.jl")
+include("diagonal_sbp.jl")
 using SparseArrays
 
 function locoperator(p, Nx, Ny, corners::NTuple{4, Tuple{T, T}}) where T <: Number

@@ -1,4 +1,4 @@
-include("diagonal_sbp_D2.jl")
+include("diagonal_sbp.jl")
 using SparseArrays
 
 function make_operators_dirchlet(p, Nx, Ny)

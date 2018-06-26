@@ -1,4 +1,4 @@
-include("diagonal_sbp_D2.jl")
+include("diagonal_sbp.jl")
 using Compat.SparseArrays
 
 

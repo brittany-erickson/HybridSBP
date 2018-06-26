@@ -1,5 +1,5 @@
 using Test
-include("diagonal_sbp_D2.jl")
+include("diagonal_sbp.jl")
 
 let
   bm = [1 4 6 8 11] # boundary stencil size

@@ -2,18 +2,20 @@ import Compat: range, undef
 using Compat.SparseArrays
 using Compat.LinearAlgebra
 # DIAGONAL_SBP_D2 creates a diagonal norm SBP operator for the 2nd drerivative
-# (D, BS, Hinv, H) = diagonal_sbp_D2(p,N)
+# (D, BS, Hinv, H, r) = diagonal_sbp_D2(p, N; xc = (-1,1))
+  (D, BS, HI, H, r)
 #
 # inputs:
 #   p: sbp interior accuracy
 #   N: finite difference grid size is N+1
+#   xc: (keyword) grid span [default: (-1, 1)]
 #
 # outputs:
 #   D:   difference operator Hinv*(-M+BS)
 #   BS:  boundary derivative operator
 #   HI:  inverse of the SBP norm
 #   H:   the SBP norm
-#   r:   grid from -1 to 1
+#   r:   grid from xc[1] to xc[2]
 #
 #   References:
 #   Operators for order 2, 4, 6, 8 are from
@@ -29,7 +31,8 @@ using Compat.LinearAlgebra
 #   Order 10 operator is from
 #   @Article{MattssonAlmquist2013JCP,
 #     author = {K. Mattsson and M. Almquist},
-#     title = {A solution to the stability issues with block norm summation by parts operators},
+#     title = {A solution to the stability issues with block norm summation by
+#     parts operators},
 #     journal = {Journal of Computational Physics},
 #     volume = {253},
 #     pages = {418--442},

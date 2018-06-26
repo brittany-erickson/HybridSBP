@@ -1,4 +1,4 @@
-include("diagonal_sbp_D2.jl")
+include("diagonal_sbp.jl")
 
 function make_operators_dirchlet(p, Nx, Ny)
   (D2x_1d, BSx_1d, HIx_1d, Hx_1d, rx_1d) = diagonal_sbp_D2(p, Nx)
