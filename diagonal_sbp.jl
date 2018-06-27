@@ -571,7 +571,6 @@ function variable_diagonal_sbp_D2(p, N, B::Array{Float64,1}; xc = (-1, 1))
 
     M = sparse([I_M0[:];I_M;I_MN[:]], [J_M0[:];J_M;J_MN[:]],
                [V_M0[:];V_M;V_MN[:]])
-    display(Matrix(sparse(I_M, J_M, V_M, N+1, N+1)) - Matrix(sparse(I_M, J_M, V_M, N+1, N+1))')
 
   else
     error(string("Operators for order ", p, " are not implemented"))
@@ -594,15 +593,14 @@ function variable_diagonal_sbp_D2(p, N, B::Array{Float64,1}; xc = (-1, 1))
   HI = sparse(H_I, H_I, H_V / h)
   H  = sparse(H_I, H_I, h ./ H_V)
 
-  S0 = sparse(ones(length(BS)), 1:length(BS), -BS[:]/h, N+1, N+1);
+  S0 = sparse(ones(length(BS)), 1:length(BS), -B[1]*BS[:]/h, N+1, N+1);
   SN = sparse((N+1) * ones(length(BS)), (N+1):-1:(N+2-length(BS)),
-              BS[:]/h, N+1, N+1);
-  D = HI * (-M + B[N+1]*SN - B[1]*S0)
+              B[N+1]*BS[:]/h, N+1, N+1);
+  D = HI * (-M + SN - S0)
 
   r = Compat.range(xc[1], stop=xc[2], length=N+1)
 
   (D, S0, SN, HI, H, M, r)
-
 end
 #}}}
 
