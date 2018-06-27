@@ -1,4 +1,5 @@
 if VERSION == v"0.6.3"
+  eigen = eig
   macro plotting(ex)
     return :($(esc(ex)))
   end
@@ -171,10 +172,24 @@ function locoperator(p, Nr, Ns, xf, yf)
   B2 = -(SsN + SsN') * (Is ⊗ Hr) - (EsN ⊗ (crsN * Qr + Qr' * crsN)) + (EsN ⊗ (τ2 * Hr))
   B3 =  (Sr0 + Sr0') * (Hs ⊗ Ir) + ((csr0 * Qs + Qs' * csr0) ⊗ Er0) + ((τ3 * Hs) ⊗ Er0)
   B4 = -(SrN + SrN') * (Hs ⊗ Ir) - ((csrN * Qs + Qs' * csrN) ⊗ ErN) + ((τ4 * Hs) ⊗ ErN)
-  
-  M = A + B2# + B2 + B3 + B4
 
-  (E, V) = eig(Matrix(M))
+  M = A + B1 + B2 + B3 + B4
+
+  er0 = sparse([1  ], [1], [1], Nrp, 1)
+  erN = sparse([Nrp], [1], [1], Nrp, 1)
+  es0 = sparse([1  ], [1], [1], Nsp, 1)
+  esN = sparse([Nsp], [1], [1], Nsp, 1)
+
+  F1 =  Ss0' * (es0 ⊗ Hr) + (es0 ⊗ Qr' * crs0) + (es0 ⊗ τ1 * Hr)
+  F2 = -SsN' * (esN ⊗ Hr) - (esN ⊗ Qr' * crsN) + (esN ⊗ τ2 * Hr)
+  F3 =  (Hs ⊗ er0) * Sr0' #+ (Qs' * csr0) ⊗ er0) + (τ3 * Hs ⊗ er0)
+  F4 = -(Hs ⊗ erN) * SrN' #+ (Qs' * csrN) ⊗ erN) + (τ4 * Hs ⊗ erN)
+  println(size(F1))
+  println(size(F2))
+  println(size(F3))
+  println(size(F4))
+
+  (E, V) = eigen(Matrix(M))
   println((minimum(E), maximum(E)))
 end
 
