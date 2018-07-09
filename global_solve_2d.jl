@@ -193,7 +193,7 @@ let
   # EToF: Element to Unique Global Faces
   EToF = ((1, 2, 7, 8), (2, 3, 10, 11), (4, 5, 8, 9), (5, 6, 11, 12))
 
-  # EToF: Element to Unique Global Faces Orientation
+  # EToO: Element to Unique Global Faces Orientation
   EToO = ((0, 0, 0, 0), (0, 0,  0,  0), (0, 0, 0, 0), (0, 0,  0,  0))
 
   # EToS: Element to Unique Global Face Side
