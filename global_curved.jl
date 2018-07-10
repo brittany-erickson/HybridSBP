@@ -268,8 +268,11 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2)
   # (E, V) = eigen(Matrix(M))
   # println((minimum(E), maximum(E)))
   (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), Diagonal(J) * (Hs ⊗ Hr),
-   ((sJ1, nx1, ny1, H1I, τ1), (sJ2, nx2, ny2, H2I, τ2),
-    (sJ3, nx3, ny3, H3I, τ3), (sJ4, nx4, ny4, H4I, τ4)))
+   (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
+   (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
+end
+
+function glooperator()
 end
 
 let
@@ -307,9 +310,21 @@ let
   #       0 = internal face
   #       1 = Dirichlet
   #       2 = Neumann
-  # FToB = (1, 1, 1, 1, 1, 1, 1, 1, 1)
-  FToB = (1, 1, 1, 1, 1, 1, 2, 2, 2)
-  # FToB = (1, 1, 1, 1, 1, 1, 0, 0, 0)
+  BC_DIRICHLET        = 1
+  BC_NEUMANN          = 2
+  BC_LOCKED_INTERFACE = 0
+  BC_JUMP_INTERFACE   = -1
+  #=
+  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
+          BC_DIRICHLET BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET)
+  =#
+  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
+          BC_DIRICHLET, BC_NEUMANN, BC_NEUMANN, BC_NEUMANN)
+  #=
+  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
+          BC_DIRICHLET BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE,
+          BC_LOCKED_INTERFACE)
+  =#
 
   # number of elements
   nelem = length(EToV)
@@ -322,9 +337,9 @@ let
   flatten_tuples = (x) -> reshape(collect(Iterators.flatten(x)),
                                   length(x[1]), length(x))
   verts = flatten_tuples(verts)
-  EToV = flatten_tuples(EToV)
-  EToF = flatten_tuples(EToF)
-  FToB = flatten_tuples(FToB)
+  EToV  = flatten_tuples(EToV)
+  EToF  = flatten_tuples(EToF)
+  FToB  = flatten_tuples(FToB)
   EToN0 = flatten_tuples(EToN0)
 
   @plotting let
@@ -385,7 +400,7 @@ let
   xg = (r, s)-> r + sin.(π * s) .* cos.(π * r) / 8
   yg = (r, s)-> s - cos.(π * s) .* sin.(π * r) / 8
 
-  ϵ = zeros(5)
+  ϵ = zeros(3)
   (kx, ky) = (π, π)
   vex   = (x,y) ->       cos.(kx * x) .* cosh.(ky * y)
   vex_x = (x,y) -> -kx * sin.(kx * x) .* cosh.(ky * y)
@@ -394,9 +409,30 @@ let
   p = 4
   for lvl = 1:length(ϵ)
     # println("level = ", lvl)
-    ops = Dict{Int64, OPTYPE}()
+    lop = Dict{Int64, Tuple{OPTYPE, Array{Float64,1}, UnitRange{Int64}}}()
+
+    Nr = Array{Int64, 1}(undef, nelem)
+    Ns = Array{Int64, 1}(undef, nelem)
+    Np = Array{Int64, 1}(undef, nelem)
+    estart = Array{Int64, 1}(undef, nelem + 1)
+    estart[1] = 1
+    IM = Array{Int64,1}(undef,0)
+    JM = Array{Int64,1}(undef,0)
+    VM = Array{Float64,1}(undef,0)
+    IH = Array{Int64,1}(undef,0)
+    JH = Array{Int64,1}(undef,0)
+    VH = Array{Float64,1}(undef,0)
+    g = Array{Float64,1}(undef,0)
     for e = 1:nelem
       # println("  elm = ", e)
+
+      # Setup number of points in each dimension
+      Nr[e] = EToN0[1, e] * (2^(lvl-1))
+      Ns[e] = EToN0[2, e] * (2^(lvl-1))
+      Np[e] = (Nr[e]+1)*(Ns[e]+1)
+      estart[e+1] = estart[e] + Np[e]
+
+      # Setup this elements coordinate transform
       (x1, x2, x3, x4) = verts[1, EToV[:, e]]
       (y1, y2, y3, y4) = verts[2, EToV[:, e]]
       rt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s)
@@ -407,60 +443,53 @@ let
       # xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s)
       # yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
-      Nr = EToN0[1, e] * (2^(lvl-1))
-      Ns = EToN0[2, e] * (2^(lvl-1))
+      # Build local operators (M assumed Dirichlet BC)
+      (M, F, L, (x, y), H, sJ, nx, ny, HfI, τ) =
+        locoperator(p, Nr[e], Ns[e], xt, yt)
 
-      (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), H,
-       ((sJ1, nx1, ny1, H1I, τ1), (sJ2, nx2, ny2, H2I, τ2),
-        (sJ3, nx3, ny3, H3I, τ3), (sJ4, nx4, ny4, H4I, τ4))) =
-      ops[e] =
-      locoperator(p, Nr, Ns, xt, yt)
-
+      # Compute the boundary conditions
       v = vex(x,y)
       v_x = vex_x(x,y)
       v_y = vex_y(x,y)
-      if FToB[EToF[1, e]] == 1
-        v1 = L1 * v
-      elseif FToB[EToF[1, e]] == 2
-        gN1 = nx1 .* (L1 * v_x) + ny1 .* (L1 * v_y)
-        v1 = gN1 ./ diag(τ1)
-        M -= F1' * (Diagonal(1 ./ (sJ1 .* diag(τ1))) * H1I) * F1
-      else
-        error("invalid bc")
-      end
-      if FToB[EToF[2, e]] == 1
-        v2 = L2 * v
-      elseif FToB[EToF[2, e]] == 2
-        gN2 = nx2 .* (L2 * v_x) + ny2 .* (L2 * v_y)
-        v2 = gN2 ./ diag(τ2)
-        M -= F2' * (Diagonal(1 ./ (sJ2 .* diag(τ2))) * H2I) * F2
-      else
-        error("invalid bc")
-      end
-      if FToB[EToF[3, e]] == 1
-        v3 = L3 * v
-      elseif FToB[EToF[3, e]] == 2
-        gN3 = nx3 .* (L3 * v_x) + ny3 .* (L3 * v_y)
-        v3 = gN3 ./ diag(τ3)
-        M -= F3' * (Diagonal(1 ./ (sJ3 .* diag(τ3))) * H3I) * F3
-      else
-        error("invalid bc")
-      end
-      if FToB[EToF[4, e]] == 1
-        v4 = L4 * v
-      elseif FToB[EToF[4, e]] == 2
-        gN4 = nx4 .* (L4 * v_x) + ny4 .* (L4 * v_y)
-        v4 = gN4 ./ diag(τ4)
-        M -= F4' * (Diagonal(1 ./ (sJ4 .* diag(τ4))) * H4I) * F4
-      else
-        error("invalid bc")
+
+      # Modify operators for the BC
+      ge = zeros(Float64, Np[e])
+      for f = 1:4
+        if FToB[EToF[f, e]] == BC_DIRICHLET
+          (xf, yf) = (L[f] * x, L[f] * y)
+          vf = vex(xf, yf)
+        elseif FToB[EToF[f, e]] == BC_NEUMANN
+          (xf, yf) = (L[f] * x, L[f] * y)
+          gN = nx[f] .* vex_x(xf, yf) + ny[f] .* vex_y(xf, yf)
+          vf = gN ./ diag(τ[f])
+          M -= F[f]' * (Diagonal(1 ./ (sJ[f] .* diag(τ[f]))) * HfI[f]) * F[f]
+        else
+          error("invalid bc")
+        end
+        ge += F[f]' * vf
       end
 
-      g = F1' * v1 + F2' * v2 + F3' * v3 + F4' * v4
-      u = M \ g
+      (Ie, Je, Ve) = findnz(M)
+
+      IM = [IM;Ie .+ (estart[e]-1)]
+      JM = [JM;Je .+ (estart[e]-1)]
+      VM = [VM;Ve]
+      g = [g;ge]
+
+      IH = [IH;estart[e]:estart[e+1]-1]
+      JH = [JH;estart[e]:estart[e+1]-1]
+      VH = [VH;Vector(diag(H))]
+
+      lop[e] = ((M, F, L, (x, y), H, sJ, nx, ny, HfI, τ), ge,
+                estart[e]:(estart[e+1]-1))
+
+      u = M \ ge
       Δ = u - v
       ϵ[lvl] += Δ' * H * Δ
     end
+    M = sparse(IM, JM, VM, estart[nelem+1]-1, estart[nelem+1]-1)
+    H = sparse(IH, JH, VH, estart[nelem+1]-1, estart[nelem+1]-1)
+
     ϵ[lvl] = sqrt(ϵ[lvl])
     println("level = ", lvl, " :: error = ", ϵ[lvl])
   end
