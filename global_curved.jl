@@ -3,6 +3,9 @@ if VERSION == v"0.6.3"
   macro plotting(ex)
     return :($(esc(ex)))
   end
+  macro isdefined(s::Symbol)
+    return isdefined(s)
+  end
 else
   macro plotting(ex)
   end
@@ -19,8 +22,17 @@ using Compat
 import Compat: range, undef
 using Compat.SparseArrays
 
-⊗ = (A,B) -> kron(A, B)
+# flatten tuples to arrays
+if !@isdefined flatten_tuples
+  const flatten_tuples = (x) -> reshape(collect(Iterators.flatten(x)),
+                                        length(x[1]), length(x))
+end
 
+if !@isdefined ⊗
+  const ⊗ = (A,B) -> kron(A, B)
+end
+
+#{{{ Transfinite Blend
 function transfinite_blend(α1, α2, α3, α4, r, s)
   # +---4---+
   # |       |
@@ -47,7 +59,63 @@ function transfinite_blend(v1::T, v2, v3, v4, r, s) where T <: Number
   e4 = (α) -> v3 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
   transfinite_blend(e1, e2, e3, e4, r, s)
 end
+#}}}
 
+#{{{ connectivityarrays
+function connectivityarrays(EToV, EToF)
+  # number of elements
+  nelem = size(EToV, 2)
+  nface = maximum(maximum(EToF))
+
+  # Determine secondary arrays
+  # FToE : Unique Global Face to Element Number
+  # FToLF: Unique Global Face to Element local face number
+  # EToO : Element to Unique Global Faces Orientation
+  # EToS : Element to Unique Global Face Side
+
+  FToE  = zeros(Int64, 2, nface)
+  FToLF = zeros(Int64, 2, nface)
+  EToO  = Array{Bool,2}(undef, 4, nelem)
+  EToS  = zeros(Int64, 4, nelem)
+
+  # Local Face to Local Vertex map
+  LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
+  for e = 1:nelem
+    for lf = 1:4
+      gf = EToF[lf, e]
+      if FToE[1, gf] == 0
+        @assert FToLF[1, gf] == 0
+        FToE[1, gf] = e
+        FToLF[1, gf] = lf
+        EToO[lf, e] = true
+        EToS[lf, e] = 1
+      else
+        @assert FToE[2, gf] == 0
+        @assert FToLF[2, gf] == 0
+        FToE[2, gf] = e
+        FToLF[2, gf] = lf
+        EToS[lf, e] = 2
+
+        ne = FToE[1, gf]
+        nf = FToLF[1, gf]
+
+        nv = EToV[LFToLV[:,nf], ne]
+        lv = EToV[LFToLV[:,lf], e]
+        if nv == lv
+          EToO[lf, e] = true
+        elseif nv[end:-1:1] == lv
+          EToO[lf, e] = false
+        else
+          error("problem with connectivity")
+        end
+      end
+    end
+  end
+  (FToE, FToLF, EToO, EToS)
+end
+#}}}
+
+#{{{ locoperator
 function locoperator(p, Nr, Ns, xf, yf; pm = p+2)
   Nrp = Nr + 1
   Nsp = Ns + 1
@@ -250,33 +318,15 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2)
 
   M = A + B1 + B2 + B3 + B4
 
-  (x1, y1) = (L1 * x, L1 * y)
-  (x2, y2) = (L2 * x, L2 * y)
-  (x3, y3) = (L3 * x, L3 * y)
-  (x4, y4) = (L4 * x, L4 * y)
-
-  #=
-  @plotting let
-    plot(x1, y1)
-    plot!(x2, y2)
-    plot!(x3, y3)
-    plot!(x4, y4)
-    display(plot!())
-  end
-  =#
-
   # (E, V) = eigen(Matrix(M))
   # println((minimum(E), maximum(E)))
   (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), Diagonal(J) * (Hs ⊗ Hr),
    (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
    (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
 end
-
-function glooperator()
-end
+#}}}
 
 let
-
   #                 1
   #               /   \
   #              1     6
@@ -314,33 +364,22 @@ let
   BC_NEUMANN          = 2
   BC_LOCKED_INTERFACE = 0
   BC_JUMP_INTERFACE   = -1
-  #=
-  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
-          BC_DIRICHLET BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET)
-  =#
-  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
-          BC_DIRICHLET, BC_NEUMANN, BC_NEUMANN, BC_NEUMANN)
-  #=
-  FToB = (BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET, BC_DIRICHLET,
-          BC_DIRICHLET BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE,
-          BC_LOCKED_INTERFACE)
-  =#
+  FToB = fill(BC_DIRICHLET, 9)
+  FToB[7:9] = BC_NEUMANN
 
-  # number of elements
-  nelem = length(EToV)
-  nface = length(FToB)
-  @assert typeof(EToV) == NTuple{nelem, NTuple{4, Int}}
-  @assert typeof(EToF) == NTuple{nelem, NTuple{4, Int}}
-  @assert maximum(maximum(EToF)) == nface
-
-  # flatten tuples to arrays
-  flatten_tuples = (x) -> reshape(collect(Iterators.flatten(x)),
-                                  length(x[1]), length(x))
   verts = flatten_tuples(verts)
   EToV  = flatten_tuples(EToV)
   EToF  = flatten_tuples(EToF)
-  FToB  = flatten_tuples(FToB)
   EToN0 = flatten_tuples(EToN0)
+
+  # number of elements
+  nelem = size(EToV, 2)
+  nface = size(FToB, 1)
+
+  # Some sanity checks
+  @assert typeof(EToV) == Array{Int, 2} && size(EToV) == (4, nelem)
+  @assert typeof(EToF) == Array{Int, 2} && size(EToF) == (4, nelem)
+  @assert maximum(maximum(EToF)) == nface
 
   @plotting let
     # Do some plotting
@@ -357,56 +396,25 @@ let
   # FToLF: Unique Global Face to Element local face number
   # EToO : Element to Unique Global Faces Orientation
   # EToS : Element to Unique Global Face Side
-  FToE  = zeros(Int64, 2, nface)
-  FToLF = zeros(Int64, 2, nface)
-  EToO  = Array{Bool,2}(undef, 4, nelem)
-  EToS  = zeros(Int64, 4, nelem)
-
-  # Local Face to Local Vertex map
-  LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
-  for e = 1:nelem
-    for lf = 1:4
-      gf = EToF[lf, e]
-      if FToE[1, gf] == 0
-        @assert FToLF[1, gf] == 0
-        FToE[1, gf] = e
-        FToLF[1, gf] = lf
-        EToO[lf, e] = true
-        EToS[lf, e] = 1
-      else
-        @assert FToE[2, gf] == 0
-        @assert FToLF[2, gf] == 0
-        FToE[2, gf] = e
-        FToLF[2, gf] = lf
-        EToS[lf, e] = 2
-
-        ne = FToE[1, gf]
-        nf = FToLF[1, gf]
-
-        nv = EToV[LFToLV[:,nf], ne]
-        lv = EToV[LFToLV[:,lf], e]
-        if nv == lv
-          EToO[lf, e] = true
-        elseif nv[end:-1:1] == lv
-          EToO[lf, e] = false
-        else
-          error("problem with connectivity")
-        end
-      end
-    end
-  end
+  (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # global mapping
   xg = (r, s)-> r + sin.(π * s) .* cos.(π * r) / 8
   yg = (r, s)-> s - cos.(π * s) .* sin.(π * r) / 8
 
-  ϵ = zeros(3)
+  # Exact solution
   (kx, ky) = (π, π)
   vex   = (x,y) ->       cos.(kx * x) .* cosh.(ky * y)
   vex_x = (x,y) -> -kx * sin.(kx * x) .* cosh.(ky * y)
   vex_y = (x,y) ->  ky * cos.(kx * x) .* sinh.(ky * y)
+
+
+  @plotting plot()
+
+  p = 4 # SBP interior order
+  ϵ = zeros(3) # size of this array determines the number of levels to run
+
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
-  p = 4
   for lvl = 1:length(ϵ)
     # println("level = ", lvl)
     lop = Dict{Int64, Tuple{OPTYPE, Array{Float64,1}, UnitRange{Int64}}}()
@@ -419,9 +427,9 @@ let
     IM = Array{Int64,1}(undef,0)
     JM = Array{Int64,1}(undef,0)
     VM = Array{Float64,1}(undef,0)
-    IH = Array{Int64,1}(undef,0)
-    JH = Array{Int64,1}(undef,0)
     VH = Array{Float64,1}(undef,0)
+    X = Array{Float64,1}(undef,0)
+    Y = Array{Float64,1}(undef,0)
     g = Array{Float64,1}(undef,0)
     for e = 1:nelem
       # println("  elm = ", e)
@@ -447,6 +455,13 @@ let
       (M, F, L, (x, y), H, sJ, nx, ny, HfI, τ) =
         locoperator(p, Nr[e], Ns[e], xt, yt)
 
+      @plotting let
+        plot!(reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
+              color=:black, legend=:none)
+        plot!(reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
+              color=:black, legend=:none)
+      end
+
       # Compute the boundary conditions
       v = vex(x,y)
       v_x = vex_x(x,y)
@@ -455,6 +470,8 @@ let
       # Modify operators for the BC
       ge = zeros(Float64, Np[e])
       for f = 1:4
+        @plotting plot!(L[f] * x, L[f] * y, color=:red, legend=:none,
+                        linewidth=3)
         if FToB[EToF[f, e]] == BC_DIRICHLET
           (xf, yf) = (L[f] * x, L[f] * y)
           vf = vex(xf, yf)
@@ -476,21 +493,29 @@ let
       VM = [VM;Ve]
       g = [g;ge]
 
-      IH = [IH;estart[e]:estart[e+1]-1]
-      JH = [JH;estart[e]:estart[e+1]-1]
       VH = [VH;Vector(diag(H))]
+      X = [X;x]
+      Y = [Y;y]
 
       lop[e] = ((M, F, L, (x, y), H, sJ, nx, ny, HfI, τ), ge,
                 estart[e]:(estart[e+1]-1))
 
+      #=
       u = M \ ge
       Δ = u - v
       ϵ[lvl] += Δ' * H * Δ
+      =#
     end
-    M = sparse(IM, JM, VM, estart[nelem+1]-1, estart[nelem+1]-1)
-    H = sparse(IH, JH, VH, estart[nelem+1]-1, estart[nelem+1]-1)
+    # ϵ[lvl] = sqrt(ϵ[lvl])
 
-    ϵ[lvl] = sqrt(ϵ[lvl])
+    @plotting display(plot!())
+    TNp = estart[nelem+1]-1
+    M = sparse(IM, JM, VM, TNp, TNp)
+    H = sparse(1:TNp, 1:TNp, VH, TNp, TNp)
+    u = M \ g
+    Δ = u - vex(X, Y)
+    ϵ[lvl] = sqrt(Δ' * H * Δ)
+
     println("level = ", lvl, " :: error = ", ϵ[lvl])
   end
   println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
