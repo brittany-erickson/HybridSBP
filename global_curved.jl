@@ -63,11 +63,12 @@ function transfinite_blend(α1, α2, α3, α4, r, s)
       (1 .- r) .* (1 .- s) .* α1(-1)) / 4
 end
 
-function transfinite_blend(v1::T, v2, v3, v4, r, s) where T <: Number
-  e1 = (α) -> v1 * (1 .- α) / 2 + v3 * (1 .+ α) / 2
-  e2 = (α) -> v2 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
-  e3 = (α) -> v1 * (1 .- α) / 2 + v2 * (1 .+ α) / 2
-  e4 = (α) -> v3 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
+function transfinite_blend(v1::T1, v2::T2, v3::T3, v4::T4, r, s;
+                           e1 = (α) -> v1 * (1 .- α) / 2 + v3 * (1 .+ α) / 2,
+                           e2 = (α) -> v2 * (1 .- α) / 2 + v4 * (1 .+ α) / 2,
+                           e3 = (α) -> v1 * (1 .- α) / 2 + v2 * (1 .+ α) / 2,
+                           e4 = (α) -> v3 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
+                          ) where {T1 <: Number, T2 <: Number, T3 <: Number, T4 <: Number}
   transfinite_blend(e1, e2, e3, e4, r, s)
 end
 #}}}
@@ -507,5 +508,73 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     end
     ge[:] += F[lf]' * vf
   end
+end
+#}}}
+
+#{{{ cg
+function cg(u, b, A; tol=1e-6, MaxIter=100, M = I)
+  cg(u, b, x->A*x, tol=tol, MaxIter=MaxIter, M=M)
+end
+function cg(u, b, A::Function; tol=1e-6, MaxIter=100, M = I)
+  w = A(u);
+  d = b - w;
+  g = -d;
+
+  gkTgk = g' * g;
+
+  k = 0;
+  err = g' * M * g;
+  nmx = u' * M * u;
+  tol2 = tol^2;
+  @time while k < MaxIter
+    k = k + 1;
+
+    w[:] .= A(d)
+
+    alpha = gkTgk / (d' * w)
+
+    @. u[:] = u + alpha * d
+
+    @. g[:] = g + alpha * w
+
+    gk1Tgk1 = g' * g
+
+    beta = gk1Tgk1 / gkTgk
+
+    @. d[:] = -g + beta * d
+
+    gkTgk = gk1Tgk1
+
+    err = g' * (M * g)
+    nmx = u' * (M * u)
+    if err < tol2 * (1 + nmx)
+      break
+    end
+  end
+  (u, k)
+end
+function testcg(N)
+  (Q,R) = qr(rand(N,N))
+  A = Q * Diagonal(rand(N)) * Q'
+  A = (A+A')/2
+  x = rand(N)
+
+  b = A*x
+  f = x->A*x
+  b = A*x
+
+  u = A*x
+  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
+
+  u = A*x
+  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
+
+  u = A*x
+  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
+
+  u = A*x
+  (x0,k) = cg(b,b,f, tol=1e-6, MaxIter=100, M=I)
+
+  nothing
 end
 #}}}
