@@ -1,4 +1,4 @@
-if VERSION == v"0.6.3"
+if VERSION <= v"0.6.999999"
   eigen = eig
   macro plotting(ex)
     return :($(esc(ex)))
@@ -64,8 +64,8 @@ end
 #{{{ connectivityarrays
 function connectivityarrays(EToV, EToF)
   # number of elements
-  nelem = size(EToV, 2)
-  nface = maximum(maximum(EToF))
+  nelems = size(EToV, 2)
+  nfaces = maximum(maximum(EToF))
 
   # Determine secondary arrays
   # FToE : Unique Global Face to Element Number
@@ -73,14 +73,14 @@ function connectivityarrays(EToV, EToF)
   # EToO : Element to Unique Global Faces Orientation
   # EToS : Element to Unique Global Face Side
 
-  FToE  = zeros(Int64, 2, nface)
-  FToLF = zeros(Int64, 2, nface)
-  EToO  = Array{Bool,2}(undef, 4, nelem)
-  EToS  = zeros(Int64, 4, nelem)
+  FToE  = zeros(Int64, 2, nfaces)
+  FToLF = zeros(Int64, 2, nfaces)
+  EToO  = Array{Bool,2}(undef, 4, nelems)
+  EToS  = zeros(Int64, 4, nelems)
 
   # Local Face to Local Vertex map
   LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
-  for e = 1:nelem
+  for e = 1:nelems
     for lf = 1:4
       gf = EToF[lf, e]
       if FToE[1, gf] == 0
@@ -322,7 +322,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2)
   # println((minimum(E), maximum(E)))
   (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), Diagonal(J) * (Hs ⊗ Hr),
    (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
-   (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
+   (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
 end
 #}}}
 
@@ -360,6 +360,7 @@ let
   #       0 = internal face
   #       1 = Dirichlet
   #       2 = Neumann
+  do_jump = false
   BC_DIRICHLET        = 1
   BC_NEUMANN          = 2
   BC_LOCKED_INTERFACE = 0
@@ -367,24 +368,33 @@ let
   FToB = fill(BC_DIRICHLET, 9)
   FToB[7:9] = BC_NEUMANN
 
+  FToB[8] = BC_LOCKED_INTERFACE
+  FToB[9] = BC_LOCKED_INTERFACE
+  EToN0 = ((16, 13), (14, 17), (16, 17))
+
+  do_jump = true
+  FToB[8] = BC_LOCKED_INTERFACE
+  FToB[9] = BC_JUMP_INTERFACE
+  EToN0 = ((16, 13), (14, 17), (16, 17))
+
   verts = flatten_tuples(verts)
   EToV  = flatten_tuples(EToV)
   EToF  = flatten_tuples(EToF)
   EToN0 = flatten_tuples(EToN0)
 
   # number of elements
-  nelem = size(EToV, 2)
-  nface = size(FToB, 1)
+  nelems = size(EToV, 2)
+  nfaces = size(FToB, 1)
 
   # Some sanity checks
-  @assert typeof(EToV) == Array{Int, 2} && size(EToV) == (4, nelem)
-  @assert typeof(EToF) == Array{Int, 2} && size(EToF) == (4, nelem)
-  @assert maximum(maximum(EToF)) == nface
+  @assert typeof(EToV) == Array{Int, 2} && size(EToV) == (4, nelems)
+  @assert typeof(EToF) == Array{Int, 2} && size(EToF) == (4, nelems)
+  @assert maximum(maximum(EToF)) == nfaces
 
   @plotting let
     # Do some plotting
     scatter(verts[1,:], verts[2,:], marker=10, legend=:none)
-    for e = 1:nelem
+    for e = 1:nelems
       plot!(verts[1, EToV[[1 2 4 3 1], e]]', verts[2, EToV[[1 2 4 3 1], e]]',
             legend=:none)
     end
@@ -404,9 +414,14 @@ let
 
   # Exact solution
   (kx, ky) = (π, π)
-  vex   = (x,y) ->       cos.(kx * x) .* cosh.(ky * y)
-  vex_x = (x,y) -> -kx * sin.(kx * x) .* cosh.(ky * y)
-  vex_y = (x,y) ->  ky * cos.(kx * x) .* sinh.(ky * y)
+  vex   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y)
+  vex_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y)
+  vex_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y)
+  if do_jump
+    vex   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y) + div.(e,2)
+    vex_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y)
+    vex_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y)
+  end
 
 
   @plotting plot()
@@ -419,26 +434,28 @@ let
     # println("level = ", lvl)
     lop = Dict{Int64, Tuple{OPTYPE, Array{Float64,1}, UnitRange{Int64}}}()
 
-    Nr = Array{Int64, 1}(undef, nelem)
-    Ns = Array{Int64, 1}(undef, nelem)
-    Np = Array{Int64, 1}(undef, nelem)
-    estart = Array{Int64, 1}(undef, nelem + 1)
-    estart[1] = 1
+    #{{{ Build the volume operators
+    Nr = Array{Int64, 1}(undef, nelems)
+    Ns = Array{Int64, 1}(undef, nelems)
+    Np = Array{Int64, 1}(undef, nelems)
+    vstarts = Array{Int64, 1}(undef, nelems + 1)
+    vstarts[1] = 1
     IM = Array{Int64,1}(undef,0)
     JM = Array{Int64,1}(undef,0)
     VM = Array{Float64,1}(undef,0)
     VH = Array{Float64,1}(undef,0)
     X = Array{Float64,1}(undef,0)
     Y = Array{Float64,1}(undef,0)
+    E = Array{Float64,1}(undef,0)
     g = Array{Float64,1}(undef,0)
-    for e = 1:nelem
-      # println("  elm = ", e)
+    for e = 1:nelems
+      # println("  element = ", e)
 
       # Setup number of points in each dimension
       Nr[e] = EToN0[1, e] * (2^(lvl-1))
       Ns[e] = EToN0[2, e] * (2^(lvl-1))
       Np[e] = (Nr[e]+1)*(Ns[e]+1)
-      estart[e+1] = estart[e] + Np[e]
+      vstarts[e+1] = vstarts[e] + Np[e]
 
       # Setup this elements coordinate transform
       (x1, x2, x3, x4) = verts[1, EToV[:, e]]
@@ -452,10 +469,10 @@ let
       # yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
       # Build local operators (M assumed Dirichlet BC)
-      (M, F, L, (x, y), H, sJ, nx, ny, HfI, τ) =
+      (M, F, L, (x, y), H, sJ, nx, ny, Hf, HfI, τ) =
         locoperator(p, Nr[e], Ns[e], xt, yt)
 
-      @plotting let
+      @plotting if lvl == 1
         plot!(reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
               color=:black, legend=:none)
         plot!(reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
@@ -463,42 +480,65 @@ let
       end
 
       # Compute the boundary conditions
-      v = vex(x,y)
-      v_x = vex_x(x,y)
-      v_y = vex_y(x,y)
+      v = vex(x,y,e)
+      v_x = vex_x(x,y,e)
+      v_y = vex_y(x,y,e)
 
       # Modify operators for the BC
       ge = zeros(Float64, Np[e])
-      for f = 1:4
-        @plotting plot!(L[f] * x, L[f] * y, color=:red, legend=:none,
-                        linewidth=3)
-        if FToB[EToF[f, e]] == BC_DIRICHLET
-          (xf, yf) = (L[f] * x, L[f] * y)
-          vf = vex(xf, yf)
-        elseif FToB[EToF[f, e]] == BC_NEUMANN
-          (xf, yf) = (L[f] * x, L[f] * y)
-          gN = nx[f] .* vex_x(xf, yf) + ny[f] .* vex_y(xf, yf)
-          vf = gN ./ diag(τ[f])
-          M -= F[f]' * (Diagonal(1 ./ (sJ[f] .* diag(τ[f]))) * HfI[f]) * F[f]
+      for lf = 1:4
+        f = EToF[lf, e]
+        if FToB[f] == BC_DIRICHLET
+          @plotting if lvl == 1
+            plot!(L[lf] * x, L[lf] * y, color=:red, legend=:none, linewidth=3)
+          end
+          (xf, yf) = (L[lf] * x, L[lf] * y)
+          vf = vex(xf, yf, e)
+        elseif FToB[f] == BC_NEUMANN
+          @plotting if lvl == 1
+            plot!(L[lf] * x, L[lf] * y, color=:blue, legend=:none, linewidth=3)
+          end
+          (xf, yf) = (L[lf] * x, L[lf] * y)
+          gN = nx[lf] .* vex_x(xf, yf, e) + ny[lf] .* vex_y(xf, yf, e)
+          vf = gN ./ diag(τ[lf])
+          M -= F[lf]' * (Diagonal(1 ./ (sJ[lf] .* diag(τ[lf]))) * HfI[lf]) * F[lf]
+        elseif FToB[f] == BC_LOCKED_INTERFACE
+          # nothing to do here
+          @plotting if lvl == 1
+            plot!(L[lf] * x, L[lf] * y, color=:green, legend=:none, linewidth=3)
+          end
+          continue
+        elseif FToB[f] == BC_JUMP_INTERFACE
+          # In this case we need to add in half the jump
+          @plotting if lvl == 1
+            plot!(L[lf] * x, L[lf] * y, color=:purple, legend=:none, linewidth=3)
+          end
+          (xf, yf) = (L[lf] * x, L[lf] * y)
+          vf = vex(xf, yf, e)
+          en = (EToS[lf, e] == 1 ? FToE[2,f] : FToE[1,f])
+          @assert en != e
+          vn = vex(xf, yf, en)
+          vf = (vf - vn) / 2
         else
           error("invalid bc")
         end
-        ge += F[f]' * vf
+        ge += F[lf]' * vf
       end
 
       (Ie, Je, Ve) = findnz(M)
 
-      IM = [IM;Ie .+ (estart[e]-1)]
-      JM = [JM;Je .+ (estart[e]-1)]
+      IM = [IM;Ie .+ (vstarts[e]-1)]
+      JM = [JM;Je .+ (vstarts[e]-1)]
       VM = [VM;Ve]
       g = [g;ge]
 
       VH = [VH;Vector(diag(H))]
       X = [X;x]
       Y = [Y;y]
+      E = [E;e * ones(Np[e])]
 
-      lop[e] = ((M, F, L, (x, y), H, sJ, nx, ny, HfI, τ), ge,
-                estart[e]:(estart[e+1]-1))
+      lop[e] = ((M, F, L, (x, y), H, sJ, nx, ny, Hf, HfI, τ), ge,
+                vstarts[e]:(vstarts[e+1]-1))
 
       #=
       u = M \ ge
@@ -508,15 +548,87 @@ let
     end
     # ϵ[lvl] = sqrt(ϵ[lvl])
 
-    @plotting display(plot!())
-    TNp = estart[nelem+1]-1
-    M = sparse(IM, JM, VM, TNp, TNp)
-    H = sparse(1:TNp, 1:TNp, VH, TNp, TNp)
-    u = M \ g
-    Δ = u - vex(X, Y)
+    @plotting if lvl == 1; display(plot!()); end
+    VNp = vstarts[nelems+1]-1 # total number of volume points
+    M = sparse(IM, JM, VM, VNp, VNp)
+    H = sparse(1:VNp, 1:VNp, VH, VNp, VNp)
+    # u = M \ g
+    #}}}
+
+    #{{{ Build the trace operators
+    Nλp = zeros(Int64, nfaces)
+    λstarts = Array{Int64, 1}(undef, nfaces + 1)
+    λstarts[1] = 1
+    IT = Array{Int64,1}(undef,0)
+    JT = Array{Int64,1}(undef,0)
+    VT = Array{Float64,1}(undef,0)
+    VD = Array{Float64,1}(undef,0)
+    for f = 1:nfaces
+      if FToB[f] == BC_DIRICHLET || FToB[f] == BC_NEUMANN
+        λstarts[f+1] = λstarts[f]
+        continue
+      end
+      (em, ep) = FToE[:, f]
+      (fm, fp) = FToLF[:, f]
+      Nλp[f] = (fm <= 2 ? Ns[em]+1 : Nr[em]+1)
+      @assert Nλp[f] == (fp <= 2 ? Ns[ep]+1 : Nr[ep]+1)
+      λstarts[f+1] = λstarts[f] + Nλp[f]
+
+      @assert EToO[fm, em] && EToS[fm, em] == 1
+      Fm = lop[em][1][2][fm]
+      (Ie, Je, Ve) = findnz(Fm)
+      IT = [IT; Ie .+ (λstarts[f] - 1)]
+      JT = [JT; Je .+ (vstarts[em] - 1)]
+      VT = [VT; Ve]
+
+      @assert EToS[fp, ep] == 2
+      Fp = lop[ep][1][2][fp]
+      (Ie, Je, Ve) = findnz(Fp)
+      # if element and face orientation do not match, then flip
+      if EToO[fp, ep]
+        IT = [IT; Ie .+ (λstarts[f] - 1)]
+        @assert lop[em][1][11][fm] ≈ lop[ep][1][11][fp]
+        @assert lop[em][1][6][fm] ≈ lop[ep][1][6][fp]
+        @assert lop[em][1][9][fm] ≈ lop[ep][1][9][fp]
+      else
+        IT = [IT; λstarts[f+1] .- Ie]
+        @assert lop[em][1][11][fm] ≈ rot180(lop[ep][1][11][fp])
+        @assert lop[em][1][6][fm] ≈ lop[ep][1][6][fp][end:-1:1]
+        @assert lop[em][1][9][fm] ≈ rot180(lop[ep][1][9][fp])
+      end
+      JT = [JT; Je .+ (vstarts[ep] - 1)]
+      VT = [VT; Ve]
+
+      sJf = lop[em][1][6][fm]
+      Hf = Vector(diag(lop[em][1][9][fm]))
+      τf = Vector(diag(lop[em][1][11][fm]))
+      VD = [VD; 2 * sJf .* Hf .* τf]
+
+    end
+    λNp = λstarts[nfaces+1]-1
+    T = sparse(IT, JT, VT, λNp, VNp)
+    D = sparse(Diagonal(VD))
+    #}}}
+
+    A = [ M -T'; -T  D ]
+    uλ = A \ [g;zeros(λNp)]
+    u = uλ[1:VNp]
+    Δ = u - vex(X, Y, E)
     ϵ[lvl] = sqrt(Δ' * H * Δ)
 
     println("level = ", lvl, " :: error = ", ϵ[lvl])
+    @plotting if lvl == 1
+      plot()
+      for e = 1:nelems
+        (x, y) = lop[e][1][4]
+        u = uλ[vstarts[e]:(vstarts[e+1]-1)]
+        plot!(reshape(x, Nr[e]+1, Ns[e]+1),
+              reshape(y, Nr[e]+1, Ns[e]+1),
+              reshape(u, Nr[e]+1, Ns[e]+1),
+              st = :surface)
+      end
+      display(plot!())
+    end
   end
   println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
 end
