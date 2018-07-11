@@ -6,6 +6,7 @@ if VERSION <= v"0.6.999999"
   macro isdefined(s::Symbol)
     return isdefined(s)
   end
+  closeall()
 else
   macro plotting(ex)
   end
@@ -294,10 +295,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2)
   H4 = Hr
   H4I = HrI
 
-  τ1 = Diagonal(10./sJ1)
-  τ2 = Diagonal(10./sJ2)
-  τ3 = Diagonal(10./sJ3)
-  τ4 = Diagonal(10./sJ4)
+  τ1 = Diagonal(10*Nsp./sJ1)
+  τ2 = Diagonal(10*Nsp./sJ2)
+  τ3 = Diagonal(10*Nrp./sJ3)
+  τ4 = Diagonal(10*Nrp./sJ4)
 
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
@@ -373,6 +374,7 @@ let
   EToN0 = ((16, 13), (14, 17), (16, 17))
 
   do_jump = true
+  FToB[2:7] = BC_NEUMANN
   FToB[8] = BC_LOCKED_INTERFACE
   FToB[9] = BC_JUMP_INTERFACE
   EToN0 = ((16, 13), (14, 17), (16, 17))
@@ -427,7 +429,7 @@ let
   @plotting plot()
 
   p = 4 # SBP interior order
-  ϵ = zeros(3) # size of this array determines the number of levels to run
+  ϵ = zeros(5) # size of this array determines the number of levels to run
 
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   for lvl = 1:length(ϵ)
@@ -618,7 +620,7 @@ let
 
     println("level = ", lvl, " :: error = ", ϵ[lvl])
     @plotting if lvl == 1
-      plot()
+      plot(reuse = false)
       for e = 1:nelems
         (x, y) = lop[e][1][4]
         u = uλ[vstarts[e]:(vstarts[e+1]-1)]
