@@ -355,6 +355,33 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
 end
 #}}}
 
+#{{{ plot the mesh
+@plotting function plotmesh(p, lop, Nr, Ns, EToF, FToB)
+  for e = 1:length(lop)
+    (x, y) = lop[e][4]
+    plot!(p, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
+          color=:black, legend=:none)
+    plot!(p, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
+          color=:black, legend=:none)
+    L = lop[e][3]
+    for lf = 1:4
+      f = EToF[lf, e]
+      if FToB[f] == BC_DIRICHLET
+        plot!(p, L[lf] * x, L[lf] * y, color=:red, legend=:none, linewidth=3)
+      elseif FToB[f] == BC_NEUMANN
+        plot!(p, L[lf] * x, L[lf] * y, color=:blue, legend=:none, linewidth=3)
+      elseif FToB[f] == BC_LOCKED_INTERFACE
+        plot!(p, L[lf] * x, L[lf] * y, color=:green, legend=:none, linewidth=3)
+      elseif FToB[f] == BC_JUMP_INTERFACE
+        plot!(p, L[lf] * x, L[lf] * y, color=:purple, legend=:none, linewidth=3)
+      else
+        error("invalid bc")
+      end
+    end
+  end
+end
+#}}}
+
 #{{{glovoloperator: Assemble the global volume operators
 function glovoloperator(lop, Nr, Ns)
   nelems = length(lop)
@@ -389,31 +416,6 @@ function glovoloperator(lop, Nr, Ns)
     Y = [Y;y]
     E = [E;e * ones(Np[e])]
 
-    #=
-    #{{{ plot the mesh
-    @plotting if lvl == 1
-      plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
-            color=:black, legend=:none)
-      plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
-            color=:black, legend=:none)
-      L = lop[e][3]
-      for lf = 1:4
-        f = EToF[lf, e]
-        if FToB[f] == BC_DIRICHLET
-          plot!(p2, L[lf] * x, L[lf] * y, color=:red, legend=:none, linewidth=3)
-        elseif FToB[f] == BC_NEUMANN
-          plot!(p2, L[lf] * x, L[lf] * y, color=:blue, legend=:none, linewidth=3)
-        elseif FToB[f] == BC_LOCKED_INTERFACE
-          plot!(p2, L[lf] * x, L[lf] * y, color=:green, legend=:none, linewidth=3)
-        elseif FToB[f] == BC_JUMP_INTERFACE
-          plot!(p2, L[lf] * x, L[lf] * y, color=:purple, legend=:none, linewidth=3)
-        else
-          error("invalid bc")
-        end
-      end
-    end
-    #}}}
-    =#
   end
   VNp = vstarts[nelems+1]-1 # total number of volume points
   M = sparse(IM, JM, VM, VNp, VNp)
@@ -648,6 +650,7 @@ let
     #}}}
 
     # Assemble the global volume operators
+    @plotting lvl == 1 && plotmesh(p2, lop, Nr, Ns, EToF, FToB)
     (vstarts, M, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
     VNp = vstarts[nelems+1]-1
 
