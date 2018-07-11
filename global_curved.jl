@@ -488,7 +488,7 @@ end
 function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
   (~, F, L, (x, y), ~, sJ, nx, ny, ~, ~, τ) = lop
-  ge[:] = 0
+  ge[:] .= 0
   for lf = 1:4
     (xf, yf) = (L[lf] * x, L[lf] * y)
     if LFToB[lf] == BC_DIRICHLET
@@ -558,7 +558,7 @@ let
   =#
 
   # Test with locked and jump interfaces
-  FToB[2:7] = BC_NEUMANN
+  FToB[2:7] .= BC_NEUMANN
   FToB[8] = BC_LOCKED_INTERFACE
   FToB[9] = BC_JUMP_INTERFACE
   EToN0 = ((16, 13), (14, 17), (16, 17))
@@ -601,8 +601,8 @@ let
   vex   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y)
   vex_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y)
   vex_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y)
-  if contains(==, FToB, BC_JUMP_INTERFACE)
-    vex   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y) - 4*div.(e,2)
+  if any(y -> y == BC_JUMP_INTERFACE, FToB)
+    vex   = (x,y,e) ->       cos.(kx * x) .* cosh.(ky * y) .- 4*div.(e,2)
     vex_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y)
     vex_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y)
   end
