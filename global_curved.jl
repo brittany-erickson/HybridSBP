@@ -12,6 +12,7 @@ if VERSION <= v"0.6.999999"
   macro isdefined(s::Symbol)
     return isdefined(s)
   end
+  mul! = A_mul_B!
 else
   macro plotting(ex)
   end
@@ -525,15 +526,15 @@ function cg(u0, b, A; tol=1e-8, MaxIter=100, M = I)
   d = copy(u0)
   g = copy(u0)
   tmp = copy(u0)
-  k = cg!(u, w, d, g, tmp, u0, b, (y,x)->A_mul_B!(y, A, x); tol=tol,
-          MaxIter=MaxIter, M=M)
+  k = cg!(u, w, d, g, tmp, u0, b, (y,x)->mul!(y, A, x);
+          tol=tol, MaxIter=MaxIter, M=M)
   (u, k)
 end
 function cg!(u, w, d, g, tmp, u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
 
   A(w, u)
-  @. d[:] = b - w
-  @. g[:] = -d
+  @. d = b - w
+  @. g = -d
 
   gkTgk = g' * g
 
@@ -547,15 +548,15 @@ function cg!(u, w, d, g, tmp, u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
 
     alpha = gkTgk / (d' * w)
 
-    @. u[:] = u + alpha * d
+    @. u = u + alpha * d
 
-    @. g[:] = g + alpha * w
+    @. g = g + alpha * w
 
     gk1Tgk1 = g' * g
 
     beta = gk1Tgk1 / gkTgk
 
-    @. d[:] = -g + beta * d
+    @. d = -g + beta * d
 
     gkTgk = gk1Tgk1
 
