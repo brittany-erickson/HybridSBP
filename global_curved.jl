@@ -512,24 +512,38 @@ end
 #}}}
 
 #{{{ cg
-function cg(u, b, A; tol=1e-6, MaxIter=100, M = I)
-  cg(u, b, x->A*x, tol=tol, MaxIter=MaxIter, M=M)
+function enorm(A::UniformScaling{T}, g, tmp) where T
+  g' * g
 end
-function cg(u, b, A::Function; tol=1e-6, MaxIter=100, M = I)
-  w = A(u);
-  d = b - w;
-  g = -d;
+function enorm(M::Vector{T}, g, tmp) where T
+    @. tmp = M * g
+    g' * tmp
+end
+function cg(u0, b, A; tol=1e-8, MaxIter=100, M = I)
+  u = copy(u0)
+  w = copy(u0)
+  d = copy(u0)
+  g = copy(u0)
+  tmp = copy(u0)
+  k = cg!(u, w, d, g, tmp, u0, b, (y,x)->A_mul_B!(y, A, x); tol=tol,
+          MaxIter=MaxIter, M=M)
+  (u, k)
+end
+function cg!(u, w, d, g, tmp, u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
 
-  gkTgk = g' * g;
+  A(w, u)
+  @. d[:] = b - w
+  @. g[:] = -d
 
-  k = 0;
-  err = g' * M * g;
-  nmx = u' * M * u;
-  tol2 = tol^2;
-  @time while k < MaxIter
-    k = k + 1;
+  gkTgk = g' * g
 
-    w[:] .= A(d)
+  err = enorm(M, g, tmp)
+  nmx = enorm(M, u, tmp)
+  # err = g' * g
+  # nmx = u' * u
+  tol2 = tol^2
+  for k = 1:MaxIter
+    A(w, d)
 
     alpha = gkTgk / (d' * w)
 
@@ -545,13 +559,15 @@ function cg(u, b, A::Function; tol=1e-6, MaxIter=100, M = I)
 
     gkTgk = gk1Tgk1
 
-    err = g' * (M * g)
-    nmx = u' * (M * u)
+    err = enorm(M, g, tmp)
+    nmx = enorm(M, u, tmp)
+    # err = g' * g
+    # nmx = u' * u
     if err < tol2 * (1 + nmx)
-      break
+      return k
     end
   end
-  (u, k)
+  -MaxIter
 end
 function testcg(N)
   (Q,R) = qr(rand(N,N))
@@ -564,10 +580,10 @@ function testcg(N)
   b = A*x
 
   u = A*x
-  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
+  (x0,k) = cg(u,b,A, tol=1e-6, MaxIter=100, M=I)
 
   u = A*x
-  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
+  (x0,k) = cg(u,b,A, tol=1e-6, MaxIter=100, M=I)
 
   u = A*x
   (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)

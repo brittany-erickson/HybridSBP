@@ -150,7 +150,12 @@ let
     #}}}
 
     A = [ M -T'; -T  D ]
-    uλ = A \ [g;zeros(λNp)]
+    MM = [Vector(diag(H));ones(λNp)]
+    (uλ, iter) = cg(zeros(VNp + λNp), [g;zeros(λNp)], A; MaxIter=VNp+λNp, M=MM,
+                    tol = 1e-10)
+    if iter < 0
+      println("CG did not converge")
+    end
     u = uλ[1:VNp]
     Δ = u - vex(X, Y, E)
     ϵ[lvl] = sqrt(Δ' * H * Δ)
