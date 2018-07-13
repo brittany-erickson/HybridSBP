@@ -248,6 +248,7 @@ let
     end
     =#
 
+    # TODO: Do each local solve seperately
     G = cholfact(Symmetric(M))
     L = sparse(G[:L])
     P = G[:p]
