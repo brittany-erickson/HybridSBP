@@ -2,8 +2,41 @@ do_plotting = false
 include("global_curved.jl")
 if VERSION <= v"0.6.999999"
   ldiv! = A_ldiv_B!
-else
-  macro plotting(ex)
+  cholesky = cholfact
+end
+
+if VERSION >= v"0.6.999999"
+  function bwdsub!(x, A::Transpose{T,SparseMatrixCSC{T,Int64}}, b) where T
+    copy!(x, b)
+    bwdsub!(A, x)
+  end
+  function bwdsub!(AT::Transpose{T,SparseMatrixCSC{T,Int64}}, b) where T
+    error("Not implemented yet")
+    A = AT.parent
+    nzval = A.nzval
+    rowval = A.rowval
+    colptr = A.colptr
+
+    for j = length(b):-1:1
+      i1 = colptr[j]
+      i2 = colptr[j + 1] - 1
+
+      istart = colptr[j]
+      iend   = colptr[j + 1] - 1
+      while istart <= iend && rowval[iend] > j
+        iend -= 1
+      end
+
+      @assert rowval[iend] == j
+
+      b[j] = bj = b[j]/nzval[iend]
+
+      # update remaining part
+      for i = istart:iend-1
+        b[rowval[i]] -= bj*nzval[i]
+      end
+    end
+    b
   end
 end
 
@@ -68,7 +101,6 @@ function fwdsub!(A::SparseMatrixCSC, b)
   end
   b
 end
-
 
 let
   #                 1
@@ -220,7 +252,7 @@ let
     end
     #}}}
 
-    Mfact = lufact(M)
+    # Mfact = lufact(M)
 
     # Afun = (Aλ, λ) -> Aλ[:] = D * λ - T * (Mfact \ (T' * λ))
 
@@ -249,10 +281,17 @@ let
     =#
 
     # TODO: Do each local solve seperately
-    G = cholfact(Symmetric(M))
-    L = sparse(G[:L])
-    P = G[:p]
-    U = sparse(G[:L])'
+    G = cholesky(Symmetric(M))
+    if VERSION <= v"0.6.999999"
+      L = sparse(G[:L])
+      P = G[:p]
+      U = sparse(G[:L])'
+    else
+      L = sparse(G.L)
+      P = G.p
+      U = sparse(transpose(L))
+      # U = transpose(L) #TODO: Use this one
+    end
     dd = Vector(diag(D))
     utmp = zeros(VNp)
     vtmp = view(utmp, P)
