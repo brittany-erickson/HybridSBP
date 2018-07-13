@@ -1,3 +1,4 @@
+do_plotting = false
 include("global_curved.jl")
 
 let
@@ -82,7 +83,7 @@ let
   end
 
   p = 4 # SBP interior order
-  ϵ = zeros(4) # size of this array determines the number of levels to run
+  ϵ = zeros(5) # size of this array determines the number of levels to run
 
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   for lvl = 1:length(ϵ)
@@ -150,7 +151,9 @@ let
     #}}}
 
     A = [ M -T'; -T  D ]
-    uλ = A \ [g;zeros(λNp)]
+    G = cholesky(Symmetric(A))
+    b = [g;zeros(λNp)]
+    uλ = G \ b
     u = uλ[1:VNp]
     Δ = u - vex(X, Y, E)
     ϵ[lvl] = sqrt(Δ' * H * Δ)

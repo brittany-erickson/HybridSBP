@@ -13,6 +13,7 @@ if VERSION <= v"0.6.999999"
     end
   end
   mul! = A_mul_B!
+  cholesky = cholfact
 else
   macro plotting(ex)
   end
@@ -144,7 +145,9 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   Is = sparse(1.0I, Nsp, Nsp)
 
   Qr = Hr * Dr
+  QrT = sparse(transpose(Qr))
   Qs = Hs * Ds
+  QsT = sparse(transpose(Qs))
 
   (r, s) = (ones(Nsp) ⊗ r, s ⊗ ones(Nrp))
   (x, y) = (xf(r, s), yf(r, s))
@@ -167,87 +170,116 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   crs = csr = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
 
-  IArr = Array{Int64,1}(undef,0)
-  JArr = Array{Int64,1}(undef,0)
-  VArr = Array{Float64,1}(undef,0)
   ISr0 = Array{Int64,1}(undef,0)
   JSr0 = Array{Int64,1}(undef,0)
   VSr0 = Array{Float64,1}(undef,0)
   ISrN = Array{Int64,1}(undef,0)
   JSrN = Array{Int64,1}(undef,0)
   VSrN = Array{Float64,1}(undef,0)
+
+  (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Nr, rand(Nrp))
+  IArr = Array{Int64,1}(undef,Nsp * length(Ae.nzval))
+  JArr = Array{Int64,1}(undef,Nsp * length(Ae.nzval))
+  VArr = Array{Float64,1}(undef,Nsp * length(Ae.nzval))
+  stArr = 0
+
+  ISr0 = Array{Int64,1}(undef,Nsp * length(S0e.nzval))
+  JSr0 = Array{Int64,1}(undef,Nsp * length(S0e.nzval))
+  VSr0 = Array{Float64,1}(undef,Nsp * length(S0e.nzval))
+  stSr0 = 0
+
+  ISrN = Array{Int64,1}(undef,Nsp * length(SNe.nzval))
+  JSrN = Array{Int64,1}(undef,Nsp * length(SNe.nzval))
+  VSrN = Array{Float64,1}(undef,Nsp * length(SNe.nzval))
+  stSrN = 0
   for j = 1:Nsp
     rng = (j-1) * Nrp .+ (1:Nrp)
     (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Nr, crr[rng])
     (Ie, Je, Ve) = findnz(Ae)
-    IArr = [IArr;Ie .+ (j-1) * Nrp]
-    JArr = [JArr;Je .+ (j-1) * Nrp]
-    VArr = [VArr;Hs[j,j] * Ve]
+    IArr[stArr .+ (1:length(Ve))] = Ie .+ (j-1) * Nrp
+    JArr[stArr .+ (1:length(Ve))] = Je .+ (j-1) * Nrp
+    VArr[stArr .+ (1:length(Ve))] = Hs[j,j] * Ve
+    stArr += length(Ve)
 
     (Ie, Je, Ve) = findnz(S0e)
-    ISr0 = [ISr0;Ie .+ (j-1) * Nrp]
-    JSr0 = [JSr0;Je .+ (j-1) * Nrp]
-    VSr0 = [VSr0; Hs[j,j] * Ve]
+    ISr0[stSr0 .+ (1:length(Ve))] = Ie .+ (j-1) * Nrp
+    JSr0[stSr0 .+ (1:length(Ve))] = Je .+ (j-1) * Nrp
+    VSr0[stSr0 .+ (1:length(Ve))] =  Hs[j,j] * Ve
+    stSr0 += length(Ve)
 
     (Ie, Je, Ve) = findnz(SNe)
-    ISrN = [ISrN;Ie .+ (j-1) * Nrp]
-    JSrN = [JSrN;Je .+ (j-1) * Nrp]
-    VSrN = [VSrN; Hs[j,j] * Ve]
+    ISrN[stSrN .+ (1:length(Ve))] = Ie .+ (j-1) * Nrp
+    JSrN[stSrN .+ (1:length(Ve))] = Je .+ (j-1) * Nrp
+    VSrN[stSrN .+ (1:length(Ve))] =  Hs[j,j] * Ve
+    stSrN += length(Ve)
   end
-  Arr = sparse(IArr, JArr, VArr, Np, Np)
-  Sr0 = sparse(ISr0, JSr0, VSr0, Np, Np)
-  SrN = sparse(ISrN, JSrN, VSrN, Np, Np)
-  @assert Arr ≈ Arr'
+  Arr = sparse(IArr[1:stArr], JArr[1:stArr], VArr[1:stArr], Np, Np)
+  Sr0 = sparse(ISr0[1:stSr0], JSr0[1:stSr0], VSr0[1:stSr0], Np, Np)
+  SrN = sparse(ISrN[1:stSrN], JSrN[1:stSrN], VSrN[1:stSrN], Np, Np)
+  Sr0T = sparse(JSr0[1:stSr0], ISr0[1:stSr0], VSr0[1:stSr0], Np, Np)
+  SrNT = sparse(JSrN[1:stSrN], ISrN[1:stSrN], VSrN[1:stSrN], Np, Np)
+  # @assert Arr ≈ Arr'
   (D2, S0, SN, ~, ~, ~) = diagonal_sbp_D2(p, Nr)
   #= affine mesh test
   Ar = SN - S0 - Hr * D2
   @assert Arr ≈ Hs ⊗ Ar
   =#
-  @assert Sr0 ≈ ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ S0)
-  @assert SrN ≈ ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ SN)
+  # @assert Sr0 ≈ ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ S0)
+  # @assert SrN ≈ ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ SN)
 
-  IAss = Array{Int64,1}(undef,0)
-  JAss = Array{Int64,1}(undef,0)
-  VAss = Array{Float64,1}(undef,0)
-  ISs0 = Array{Int64,1}(undef,0)
-  JSs0 = Array{Int64,1}(undef,0)
-  VSs0 = Array{Float64,1}(undef,0)
-  ISsN = Array{Int64,1}(undef,0)
-  JSsN = Array{Int64,1}(undef,0)
-  VSsN = Array{Float64,1}(undef,0)
+  (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Ns, rand(Nsp))
+  IAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
+  JAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
+  VAss = Array{Float64,1}(undef,Nrp * length(Ae.nzval))
+  stAss = 0
+
+  ISs0 = Array{Int64,1}(undef,Nrp * length(S0e.nzval))
+  JSs0 = Array{Int64,1}(undef,Nrp * length(S0e.nzval))
+  VSs0 = Array{Float64,1}(undef,Nrp * length(S0e.nzval))
+  stSs0 = 0
+
+  ISsN = Array{Int64,1}(undef,Nrp * length(SNe.nzval))
+  JSsN = Array{Int64,1}(undef,Nrp * length(SNe.nzval))
+  VSsN = Array{Float64,1}(undef,Nrp * length(SNe.nzval))
+  stSsN = 0
   for i = 1:Nrp
     rng = i .+ Nrp * (0:Ns)
     (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Ns, css[rng])
 
     (Ie, Je, Ve) = findnz(Ae)
-    IAss = [IAss;i .+ Nrp * (Ie .- 1)]
-    JAss = [JAss;i .+ Nrp * (Je .- 1)]
-    VAss = [VAss;Hr[i,i] * Ve]
+    IAss[stAss .+ (1:length(Ve))] = i .+ Nrp * (Ie .- 1)
+    JAss[stAss .+ (1:length(Ve))] = i .+ Nrp * (Je .- 1)
+    VAss[stAss .+ (1:length(Ve))] = Hr[i,i] * Ve
+    stAss += length(Ve)
 
     (Ie, Je, Ve) = findnz(S0e)
-    ISs0 = [ISs0;i .+ Nrp * (Ie .- 1)]
-    JSs0 = [JSs0;i .+ Nrp * (Je .- 1)]
-    VSs0 = [VSs0;Hr[i,i] * Ve]
+    ISs0[stSs0 .+ (1:length(Ve))] = i .+ Nrp * (Ie .- 1)
+    JSs0[stSs0 .+ (1:length(Ve))] = i .+ Nrp * (Je .- 1)
+    VSs0[stSs0 .+ (1:length(Ve))] = Hr[i,i] * Ve
+    stSs0 += length(Ve)
 
     (Ie, Je, Ve) = findnz(SNe)
-    ISsN = [ISsN;i .+ Nrp * (Ie .- 1)]
-    JSsN = [JSsN;i .+ Nrp * (Je .- 1)]
-    VSsN = [VSsN;Hr[i,i] * Ve]
+    ISsN[stSsN .+ (1:length(Ve))] = i .+ Nrp * (Ie .- 1)
+    JSsN[stSsN .+ (1:length(Ve))] = i .+ Nrp * (Je .- 1)
+    VSsN[stSsN .+ (1:length(Ve))] = Hr[i,i] * Ve
+    stSsN += length(Ve)
   end
-  Ass = sparse(IAss, JAss, VAss, Np, Np)
-  Ss0 = sparse(ISs0, JSs0, VSs0, Np, Np)
-  SsN = sparse(ISsN, JSsN, VSsN, Np, Np)
-  @assert Ass ≈ Ass'
+  Ass = sparse(IAss[1:stAss], JAss[1:stAss], VAss[1:stAss], Np, Np)
+  Ss0 = sparse(ISs0[1:stSs0], JSs0[1:stSs0], VSs0[1:stSs0], Np, Np)
+  SsN = sparse(ISsN[1:stSsN], JSsN[1:stSsN], VSsN[1:stSsN], Np, Np)
+  Ss0T = sparse(JSs0[1:stSs0], ISs0[1:stSs0], VSs0[1:stSs0], Np, Np)
+  SsNT = sparse(JSsN[1:stSsN], ISsN[1:stSsN], VSsN[1:stSsN], Np, Np)
+  # @assert Ass ≈ Ass'
   (D2, S0, SN, ~, ~, ~) = diagonal_sbp_D2(p, Ns)
   #= affine mesh test
   As = SN - S0 - Hs * D2
   @assert Ass ≈ As ⊗ Hr
   =#
-  @assert Ss0 ≈ (S0 ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
-  @assert SsN ≈ (SN ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+  # @assert Ss0 ≈ (S0 ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
+  # @assert SsN ≈ (SN ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
 
-  Asr = (sparse(Qs') ⊗ Ir) * sparse(Diagonal(crs)) * (Is ⊗ Qr)
-  Ars = (Is ⊗ sparse(Qr')) * sparse(Diagonal(csr)) * (Qs ⊗ Ir)
+  Asr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
+  Ars = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
 
   A = Arr + Ass + Ars + Asr
 
@@ -261,15 +293,15 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   csr0 = sparse(Diagonal(csr[1   .+ Nrp*(0:Ns)]))
   csrN = sparse(Diagonal(csr[Nrp .+ Nrp*(0:Ns)]))
 
-  er0 = sparse([1  ], [1], [1], Nrp, 1)
-  erN = sparse([Nrp], [1], [1], Nrp, 1)
-  es0 = sparse([1  ], [1], [1], Nsp, 1)
-  esN = sparse([Nsp], [1], [1], Nsp, 1)
+  er0T = sparse([1], [1  ], [1], 1, Nrp)
+  erNT = sparse([1], [Nrp], [1], 1, Nrp)
+  es0T = sparse([1], [1  ], [1], 1, Nsp)
+  esNT = sparse([1], [Nsp], [1], 1, Nsp)
 
-  L1 = (Is ⊗ er0')
-  L2 = (Is ⊗ erN')
-  L3 = (es0' ⊗ Ir)
-  L4 = (esN' ⊗ Ir)
+  L1 = (Is ⊗ er0T)
+  L2 = (Is ⊗ erNT)
+  L3 = (es0T ⊗ Ir)
+  L4 = (esNT ⊗ Ir)
 
   nx1 = -L1 * ys
   ny1 =  L1 * xs
@@ -307,27 +339,26 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   H4 = Hr
   H4I = HrI
 
-  τ1 = Diagonal(10*Nsp./sJ1)
-  τ2 = Diagonal(10*Nsp./sJ2)
-  τ3 = Diagonal(10*Nrp./sJ3)
-  τ4 = Diagonal(10*Nrp./sJ4)
-
+  τ1 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ1)
+  τ2 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ2)
+  τ3 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ3)
+  τ4 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ4)
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
-  B1 =  (Sr0 + Sr0') + ((csr0 * Qs + Qs' * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
-  B2 = -(SrN + SrN') - ((csrN * Qs + Qs' * csrN) ⊗ ErN) + ((τ2 * H2 * SJ2) ⊗ ErN)
-  B3 =  (Ss0 + Ss0') + (Es0 ⊗ (crs0 * Qr + Qr' * crs0)) + (Es0 ⊗ (τ3 * H3 * SJ3))
-  B4 = -(SsN + SsN') - (EsN ⊗ (crsN * Qr + Qr' * crsN)) + (EsN ⊗ (τ4 * H4 * SJ4))
+  B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
+  B2 = -(SrN + SrNT) - ((csrN * Qs + QsT * csrN) ⊗ ErN) + ((τ2 * H2 * SJ2) ⊗ ErN)
+  B3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3 * SJ3))
+  B4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4 * SJ4))
 
-  F1 =  (Is ⊗ er0') * Sr0 + ((csr0 * Qs) ⊗ er0') + ((τ1 * H1 * SJ1) ⊗ er0')
-  F2 = -(Is ⊗ erN') * SrN - ((csrN * Qs) ⊗ erN') + ((τ2 * H2 * SJ2) ⊗ erN')
-  F3 =  (es0' ⊗ Ir) * Ss0 + (es0' ⊗ (crs0 * Qr)) + (es0' ⊗ (τ3 * H3 * SJ3))
-  F4 = -(esN' ⊗ Ir) * SsN - (esN' ⊗ (crsN * Qr)) + (esN' ⊗ (τ4 * H4 * SJ4))
+  F1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T) + ((τ1 * H1 * SJ1) ⊗ er0T)
+  F2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT) + ((τ2 * H2 * SJ2) ⊗ erNT)
+  F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3 * SJ3))
+  F4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr)) + (esNT ⊗ (τ4 * H4 * SJ4))
 
-  @assert B1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1 * SJ1) ⊗ Er0)
-  @assert B2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2 * SJ2) ⊗ ErN)
-  @assert B3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3 * SJ3))
-  @assert B4 ≈ F4' * L4 + L4' * F4 - (EsN ⊗ (τ4 * H4 * SJ4))
+  # @assert B1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1 * SJ1) ⊗ Er0)
+  # @assert B2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2 * SJ2) ⊗ ErN)
+  # @assert B3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3 * SJ3))
+  # @assert B4 ≈ F4' * L4 + L4' * F4 - (EsN ⊗ (τ4 * H4 * SJ4))
 
   M = A + B1 + B2 + B3 + B4
 
@@ -351,7 +382,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
 
   # (E, V) = eigen(Matrix(M))
   # println((minimum(E), maximum(E)))
-  (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), Diagonal(J) * (Hs ⊗ Hr),
+  JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
+  (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), JH,
    (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
    (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
 end

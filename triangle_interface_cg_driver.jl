@@ -133,6 +133,7 @@ let
 
   # EToN0: Element to base size sizes
   EToN0 = ((16, 13), (14, 17), (16, 17))
+  # EToN0 = ((15, 15), (15, 15), (15, 15))
 
   # This is just needed because functions below expect arrays
   verts = flatten_tuples(verts)
@@ -179,7 +180,7 @@ let
   end
 
   p = 4 # SBP interior order
-  ϵ = zeros(4) # size of this array determines the number of levels to run
+  ϵ = zeros(5) # size of this array determines the number of levels to run
 
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   for lvl = 1:length(ϵ)
@@ -247,59 +248,130 @@ let
     end
     #}}}
 
-    # Mfact = lufact(M)
-
-    # Afun = (Aλ, λ) -> Aλ[:] = D * λ - T * (Mfact \ (T' * λ))
-
     #=
     utmp = zeros(VNp)
-    Afun = (Aλ, λ) -> begin
-      mul!(utmp, Ttranspose, λ)
-      ldiv!(Mfact, utmp)
-      Aλ[:] = D * λ - T * utmp
+    CHOLTYPE = typeof(cholesky(sparse([1],[1],[1.0])))
+    VIEWTYPE = typeof(view(utmp, 1:2))
+    factors = Array{Tuple{CHOLTYPE, VIEWTYPE}, 1}(undef, nelems)
+    for e = 1:nelems
+      G = cholesky(Symmetric(lop[e][1]))
+      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
+      factors[e] = (G, V)
     end
-    =#
-
-    #=
-    utmp = zeros(VNp)
-    λtmp = zeros(VNp)
-    dd = Vector(diag(D))
-    Afun = (Aλ, λ) -> begin
-      # mul!(λtmp, Ttranspose, λ)
-      # ldiv!(utmp, Mfact, λtmp)
-      mul!(utmp, Ttranspose, λ)
-      ldiv!(Mfact, utmp)
-      mul!(Aλ, T, utmp)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, Aλ)
-      # Aλ[:] = D * λ - T * utmp
-    end
-    =#
-
-    # TODO: Do each local solve seperately
-    G = cholesky(Symmetric(M))
-    if VERSION <= v"0.6.999999"
-      L = sparse(G[:L])
-      P = G[:p]
-      U = sparse(G[:L])'
-    else
-      L = sparse(G.L)
-      P = G.p
-      U = transpose(L)
-    end
-    dd = Vector(diag(D))
-    utmp = zeros(VNp)
-    vtmp = view(utmp, P)
     λtmp = zeros(λNp)
-    dotsub = (x,y,z) -> x .* y .- z
+    dd = Vector(diag(D))
     Afun = (Aλ, λ) -> begin
       mul!(utmp, Ttranspose, λ)
-      bwdsub!(U, fwdsub!(L, vtmp))
-      mul!(λtmp, T, utmp)
-      # Aλ[:] .= dd .* λ .- Aλ
-      # map!(dotsub, Aλ, dd, λ, λtmp)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
+      # utmp = M \ utmp
+      for e = 1:nelems
+        G = factors[e][1]
+        v = factors[e][2]
+        v[:] = G \ v
+      end
       # Aλ[:] = D * λ - T * utmp
+      mul!(λtmp, T, utmp)
+      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
     end
+    =#
+
+    #=
+    utmp = zeros(VNp)
+    G = cholesky(sparse([1],[1],[1.0]))
+    if VERSION <= v"0.6.999999"
+      LTYPE = typeof(sparse(G[:L]))
+      P = G[:p]
+      LTTYPE = typeof(transpose(sparse(G[:L])))
+    else
+      LTYPE = typeof(sparse(G.L))
+      P = G.p
+      LTTYPE = typeof(transpose(sparse(G.L)))
+    end
+    L_factor = Array{LTYPE, 1}(undef, nelems)
+    LT_factor = Array{LTTYPE, 1}(undef, nelems)
+    VIEWTYPE = typeof(view(utmp, P))
+    vtmp = Array{VIEWTYPE, 1}(undef, nelems)
+    for e = 1:nelems
+      G = cholesky(Symmetric(lop[e][1]))
+      if VERSION <= v"0.6.999999"
+        L = sparse(G[:L])
+        P = G[:p]
+        LT = transpose(sparse(G[:L]))
+      else
+        L = sparse(G.L)
+        P = G.p
+        LT = transpose(L)
+      end
+      L_factor[e] = L
+      LT_factor[e] = LT
+      vtmp[e] = view(utmp, P.+(vstarts[e]-1))
+    end
+    λtmp = zeros(λNp)
+    dd = Vector(diag(D))
+    Afun = (Aλ, λ) -> begin
+      mul!(utmp, Ttranspose, λ)
+      for e = 1:nelems
+        bwdsub!(LT_factor[e], fwdsub!(L_factor[e], vtmp[e]))
+      end
+      mul!(λtmp, T, utmp)
+      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
+    end
+    =#
+
+    utmp = zeros(VNp)
+    utmp2 = zeros(VNp)
+    # factorization = (x) -> lufact(x)
+    factorization = (x) -> cholesky(Symmetric(x))
+    FTYPE = typeof(factorization(sparse([1],[1],[1.0])))
+    VIEWTYPE = typeof(view(utmp, 1:2))
+    factors = Array{Tuple{FTYPE, VIEWTYPE, VIEWTYPE}, 1}(undef, nelems)
+    for e = 1:nelems
+      F = factorization(lop[e][1])
+      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
+      V2 = view(utmp2, vstarts[e]:(vstarts[e+1]-1))
+      factors[e] = (F, V, V2)
+    end
+    λtmp = zeros(λNp)
+    dd = Vector(diag(D))
+    Afun = (Aλ, λ) -> begin
+      mul!(utmp, Ttranspose, λ)
+      for e = 1:nelems
+        F = factors[e][1]
+        v = factors[e][2]
+        v2 = factors[e][3]
+        v2[:] = F \ v
+        # ldiv!(v2, F, v)
+      end
+      # Aλ[:] = D * λ - T * utmp
+      mul!(λtmp, T, utmp2)
+      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
+      # Aλ[:] .= 1
+    end
+
+    #=
+    utmp = zeros(VNp)
+    CHOLTYPE = typeof(cholesky(sparse([1],[1],[1.0])))
+    VIEWTYPE = typeof(view(utmp, 1:2))
+    factors = Array{Tuple{CHOLTYPE, VIEWTYPE}, 1}(undef, nelems)
+    for e = 1:nelems
+      G = cholesky(Symmetric(lop[e][1]))
+      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
+      factors[e] = (G, V)
+    end
+    λtmp = zeros(λNp)
+    dd = Vector(diag(D))
+    Afun = (Aλ, λ) -> begin
+      mul!(utmp, Ttranspose, λ)
+      # utmp = M \ utmp
+      for e = 1:nelems
+        G = factors[e][1]
+        v = factors[e][2]
+        v[:] = G \ v
+      end
+      # Aλ[:] = D * λ - T * utmp
+      mul!(λtmp, T, utmp)
+      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
+    end
+    =#
 
     (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
     if iter < 0
