@@ -483,6 +483,7 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
   λNp = λstarts[nfaces+1]-1
   VNp = vstarts[nelems+1]-1
   T = sparse(IT, JT, VT, λNp, VNp)
+  # Ttranspose = sparse(JT, IT, VT, VNp, λNp)
   D = sparse(Diagonal(VD))
   (λstarts, T, D)
 end
@@ -521,13 +522,15 @@ function enorm(M::Vector{T}, g, tmp) where T
     g' * tmp
 end
 function cg(u0, b, A; tol=1e-8, MaxIter=100, M = I)
+  cg(u0, b, (y,x)->mul!(y, A, x); tol=tol, MaxIter=MaxIter, M=M)
+end
+function cg(u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
   u = copy(u0)
   w = copy(u0)
   d = copy(u0)
   g = copy(u0)
   tmp = copy(u0)
-  k = cg!(u, w, d, g, tmp, u0, b, (y,x)->mul!(y, A, x);
-          tol=tol, MaxIter=MaxIter, M=M)
+  k = cg!(u, w, d, g, tmp, u0, b, A; tol=tol, MaxIter=MaxIter, M=M)
   (u, k)
 end
 function cg!(u, w, d, g, tmp, u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
@@ -582,15 +585,11 @@ function testcg(N)
 
   u = A*x
   (x0,k) = cg(u,b,A, tol=1e-6, MaxIter=100, M=I)
+  println((norm(x0 - x), k))
 
   u = A*x
   (x0,k) = cg(u,b,A, tol=1e-6, MaxIter=100, M=I)
-
-  u = A*x
-  (x0,k) = cg(u,b,f, tol=1e-6, MaxIter=100, M=I)
-
-  u = A*x
-  (x0,k) = cg(b,b,f, tol=1e-6, MaxIter=100, M=I)
+  println((norm(x0 - x), k))
 
   nothing
 end
