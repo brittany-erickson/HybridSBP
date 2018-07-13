@@ -3,6 +3,7 @@ include("global_curved.jl")
 if VERSION <= v"0.6.999999"
   ldiv! = A_ldiv_B!
   cholesky = cholfact
+  # using CholmodSolve2
 end
 
 if VERSION >= v"0.6.999999"
@@ -374,6 +375,7 @@ let
     =#
 
     (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
+    @time (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
     if iter < 0
       println("CG did not converge")
     end

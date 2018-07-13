@@ -1,3 +1,4 @@
+do_plotting = false
 include("global_curved.jl")
 
 let
@@ -82,7 +83,7 @@ let
   end
 
   p = 4 # SBP interior order
-  ϵ = zeros(4) # size of this array determines the number of levels to run
+  ϵ = zeros(5) # size of this array determines the number of levels to run
 
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   for lvl = 1:length(ϵ)
@@ -152,6 +153,8 @@ let
     A = [ M -T'; -T  D ]
     MM = [Vector(diag(H));ones(λNp)]
     (uλ, iter) = cg(zeros(VNp + λNp), [g;zeros(λNp)], A; MaxIter=VNp+λNp, M=MM,
+                    tol = 1e-10)
+    @time (uλ, iter) = cg(zeros(VNp + λNp), [g;zeros(λNp)], A; MaxIter=VNp+λNp, M=MM,
                     tol = 1e-10)
     if iter < 0
       println("CG did not converge")

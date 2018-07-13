@@ -179,7 +179,7 @@ let
   end
 
   p = 4 # SBP interior order
-  ϵ = zeros(4) # size of this array determines the number of levels to run
+  ϵ = zeros(5) # size of this array determines the number of levels to run
 
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   for lvl = 1:length(ϵ)
@@ -302,6 +302,7 @@ let
     end
 
     (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
+    @time (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
     if iter < 0
       println("CG did not converge")
     end
