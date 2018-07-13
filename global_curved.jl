@@ -1,6 +1,9 @@
-do_plotting = true
 if VERSION <= v"0.6.999999"
   eigen = eig
+  macro isdefined(s::Symbol)
+    return isdefined(s)
+  end
+  (!isdefined(:do_plotting)) && (do_plotting = true)
   if do_plotting
     macro plotting(ex)
       return :($(esc(ex)))
@@ -8,9 +11,6 @@ if VERSION <= v"0.6.999999"
   else
     macro plotting(ex)
     end
-  end
-  macro isdefined(s::Symbol)
-    return isdefined(s)
   end
   mul! = A_mul_B!
 else
