@@ -6,35 +6,36 @@ if VERSION <= v"0.6.999999"
 end
 
 if VERSION >= v"0.6.999999"
-  function bwdsub!(x, A::Transpose{T,SparseMatrixCSC{T,Int64}}, b) where T
+  # Transpose type bwdsub
+  function bwdsub!(x, AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
+                                Adjoint{T,SparseMatrixCSC{T,Int64}}},
+                   b) where T <: Real
     copy!(x, b)
-    bwdsub!(A, x)
+    bwdsub!(AT, x)
   end
-  function bwdsub!(AT::Transpose{T,SparseMatrixCSC{T,Int64}}, b) where T
-    error("Not implemented yet")
-    A = AT.parent
-    nzval = A.nzval
-    rowval = A.rowval
-    colptr = A.colptr
+  function bwdsub!(AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
+                             Adjoint{T,SparseMatrixCSC{T,Int64}}},
+                   b) where T <: Real
+    nzval = AT.parent.nzval
+    colval = AT.parent.rowval
+    rowptr = AT.parent.colptr
 
-    for j = length(b):-1:1
-      i1 = colptr[j]
-      i2 = colptr[j + 1] - 1
+    for i = length(b):-1:1
+      jstart = rowptr[i]
+      jend   = rowptr[i + 1] - 1
 
-      istart = colptr[j]
-      iend   = colptr[j + 1] - 1
-      while istart <= iend && rowval[iend] > j
-        iend -= 1
+      # lopp through the row and subtract off pieces
+      j = jend
+      while j > jstart
+        if colval[j] > i
+          b[i] -= b[colval[j]]*nzval[j]
+          j -= 1
+        else
+          break
+        end
       end
-
-      @assert rowval[iend] == j
-
-      b[j] = bj = b[j]/nzval[iend]
-
-      # update remaining part
-      for i = istart:iend-1
-        b[rowval[i]] -= bj*nzval[i]
-      end
+      @assert colval[j] == i
+      b[i] = b[i]/nzval[j]
     end
     b
   end
@@ -50,9 +51,6 @@ function bwdsub!(A::SparseMatrixCSC, b)
   colptr = A.colptr
 
   for j = length(b):-1:1
-    i1 = colptr[j]
-    i2 = colptr[j + 1] - 1
-
     istart = colptr[j]
     iend   = colptr[j + 1] - 1
     while istart <= iend && rowval[iend] > j
@@ -81,9 +79,6 @@ function fwdsub!(A::SparseMatrixCSC, b)
   colptr = A.colptr
 
   for j = 1:length(b)
-    i1 = colptr[j]
-    i2 = colptr[j + 1] - 1
-
     istart = colptr[j]
     iend   = colptr[j + 1] - 1
     while istart <= iend && rowval[istart] < j
@@ -95,7 +90,7 @@ function fwdsub!(A::SparseMatrixCSC, b)
     b[j] = bj = b[j]/nzval[istart]
 
     # update remaining part
-    for i = istart+1:i2
+    for i = istart+1:iend
       b[rowval[i]] -= bj*nzval[i]
     end
   end
@@ -289,8 +284,7 @@ let
     else
       L = sparse(G.L)
       P = G.p
-      U = sparse(transpose(L))
-      # U = transpose(L) #TODO: Use this one
+      U = transpose(L)
     end
     dd = Vector(diag(D))
     utmp = zeros(VNp)
