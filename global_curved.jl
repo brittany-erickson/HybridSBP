@@ -558,14 +558,14 @@ function cg(u0, b, A; tol=1e-8, MaxIter=100, M = I)
 end
 function cg(u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
   u = copy(u0)
-  w = copy(u0)
-  d = copy(u0)
-  g = copy(u0)
-  tmp = copy(u0)
-  k = cg!(u, w, d, g, tmp, u0, b, A; tol=tol, MaxIter=MaxIter, M=M)
+  w = similar(u0)
+  d = similar(u0)
+  g = similar(u0)
+  tmp = similar(u0)
+  k = cg!(u, w, d, g, tmp, b, A; tol=tol, MaxIter=MaxIter, M=M)
   (u, k)
 end
-function cg!(u, w, d, g, tmp, u0, b, A::Function; tol=1e-8, MaxIter=100, M = I)
+function cg!(u, w, d, g, tmp, b, A::Function; tol=1e-8, MaxIter=100, M = I)
 
   A(w, u)
   @. d = b - w
