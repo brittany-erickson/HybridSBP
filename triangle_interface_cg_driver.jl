@@ -6,98 +6,6 @@ if VERSION <= v"0.6.999999"
   # using CholmodSolve2
 end
 
-if VERSION >= v"0.6.999999"
-  # Transpose type bwdsub
-  function bwdsub!(x, AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
-                                Adjoint{T,SparseMatrixCSC{T,Int64}}},
-                   b) where T <: Real
-    copy!(x, b)
-    bwdsub!(AT, x)
-  end
-  function bwdsub!(AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
-                             Adjoint{T,SparseMatrixCSC{T,Int64}}},
-                   b) where T <: Real
-    nzval = AT.parent.nzval
-    colval = AT.parent.rowval
-    rowptr = AT.parent.colptr
-
-    for i = length(b):-1:1
-      jstart = rowptr[i]
-      jend   = rowptr[i + 1] - 1
-
-      # lopp through the row and subtract off pieces
-      j = jend
-      while j > jstart
-        if colval[j] > i
-          b[i] -= b[colval[j]]*nzval[j]
-          j -= 1
-        else
-          break
-        end
-      end
-      @assert colval[j] == i
-      b[i] = b[i]/nzval[j]
-    end
-    b
-  end
-end
-
-function bwdsub!(x, A::SparseMatrixCSC, b)
-  copy!(x, b)
-  bwdsub!(A, x)
-end
-function bwdsub!(A::SparseMatrixCSC, b)
-  nzval = A.nzval
-  rowval = A.rowval
-  colptr = A.colptr
-
-  for j = length(b):-1:1
-    istart = colptr[j]
-    iend   = colptr[j + 1] - 1
-    while istart <= iend && rowval[iend] > j
-      iend -= 1
-    end
-
-    @assert rowval[iend] == j
-
-    b[j] = bj = b[j]/nzval[iend]
-
-    # update remaining part
-    for i = istart:iend-1
-      b[rowval[i]] -= bj*nzval[i]
-    end
-  end
-  b
-end
-
-function fwdsub!(x, A::SparseMatrixCSC, b)
-  copy!(x, b)
-  fwdsub!(A, x)
-end
-function fwdsub!(A::SparseMatrixCSC, b)
-  nzval = A.nzval
-  rowval = A.rowval
-  colptr = A.colptr
-
-  for j = 1:length(b)
-    istart = colptr[j]
-    iend   = colptr[j + 1] - 1
-    while istart <= iend && rowval[istart] < j
-      istart += 1
-    end
-
-    @assert rowval[istart] == j
-
-    b[j] = bj = b[j]/nzval[istart]
-
-    # update remaining part
-    for i = istart+1:iend
-      b[rowval[i]] -= bj*nzval[i]
-    end
-  end
-  b
-end
-
 let
   #                 1
   #               /   \
@@ -222,7 +130,7 @@ let
 
     # Assemble the global volume operators
     @plotting lvl == 1 && plotmesh(p2, lop, Nr, Ns, EToF, FToB)
-    (vstarts, M, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
+    (vstarts, ~, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
     VNp = vstarts[nelems+1]-1
 
     # Build the trace operators
@@ -249,139 +157,48 @@ let
     end
     #}}}
 
-    #=
-    utmp = zeros(VNp)
-    CHOLTYPE = typeof(cholesky(sparse([1],[1],[1.0])))
-    VIEWTYPE = typeof(view(utmp, 1:2))
-    factors = Array{Tuple{CHOLTYPE, VIEWTYPE}, 1}(undef, nelems)
-    for e = 1:nelems
-      G = cholesky(Symmetric(lop[e][1]))
-      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
-      factors[e] = (G, V)
-    end
-    λtmp = zeros(λNp)
-    dd = Vector(diag(D))
-    Afun = (Aλ, λ) -> begin
-      mul!(utmp, Ttranspose, λ)
-      # utmp = M \ utmp
-      for e = 1:nelems
-        G = factors[e][1]
-        v = factors[e][2]
-        v[:] = G \ v
-      end
-      # Aλ[:] = D * λ - T * utmp
-      mul!(λtmp, T, utmp)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
-    end
-    =#
-
-    #=
-    utmp = zeros(VNp)
-    G = cholesky(sparse([1],[1],[1.0]))
-    if VERSION <= v"0.6.999999"
-      LTYPE = typeof(sparse(G[:L]))
-      P = G[:p]
-      LTTYPE = typeof(transpose(sparse(G[:L])))
-    else
-      LTYPE = typeof(sparse(G.L))
-      P = G.p
-      LTTYPE = typeof(transpose(sparse(G.L)))
-    end
-    L_factor = Array{LTYPE, 1}(undef, nelems)
-    LT_factor = Array{LTTYPE, 1}(undef, nelems)
-    VIEWTYPE = typeof(view(utmp, P))
-    vtmp = Array{VIEWTYPE, 1}(undef, nelems)
-    for e = 1:nelems
-      G = cholesky(Symmetric(lop[e][1]))
-      if VERSION <= v"0.6.999999"
-        L = sparse(G[:L])
-        P = G[:p]
-        LT = transpose(sparse(G[:L]))
-      else
-        L = sparse(G.L)
-        P = G.p
-        LT = transpose(L)
-      end
-      L_factor[e] = L
-      LT_factor[e] = LT
-      vtmp[e] = view(utmp, P.+(vstarts[e]-1))
-    end
-    λtmp = zeros(λNp)
-    dd = Vector(diag(D))
-    Afun = (Aλ, λ) -> begin
-      mul!(utmp, Ttranspose, λ)
-      for e = 1:nelems
-        bwdsub!(LT_factor[e], fwdsub!(L_factor[e], vtmp[e]))
-      end
-      mul!(λtmp, T, utmp)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
-    end
-    =#
-
-    utmp = zeros(VNp)
-    utmp2 = zeros(VNp)
     # factorization = (x) -> lufact(x)
     factorization = (x) -> cholesky(Symmetric(x))
     FTYPE = typeof(factorization(sparse([1],[1],[1.0])))
-    VIEWTYPE = typeof(view(utmp, 1:2))
-    factors = Array{Tuple{FTYPE, VIEWTYPE, VIEWTYPE}, 1}(undef, nelems)
+    factors = Array{FTYPE, 1}(undef, nelems)
     for e = 1:nelems
-      F = factorization(lop[e][1])
-      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
-      V2 = view(utmp2, vstarts[e]:(vstarts[e+1]-1))
-      factors[e] = (F, V, V2)
+      factors[e] = factorization(lop[e][1])
     end
-    λtmp = zeros(λNp)
-    dd = Vector(diag(D))
-    Afun = (Aλ, λ) -> begin
-      mul!(utmp, Ttranspose, λ)
+    Afun = (Aλ, λ, u) -> begin
+      mul!(u, Ttranspose, λ)
       for e = 1:nelems
-        F = factors[e][1]
-        v = factors[e][2]
-        v2 = factors[e][3]
-        v2[:] = F \ v
-        # ldiv!(v2, F, v)
+        F = factors[e]
+        @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       end
-      # Aλ[:] = D * λ - T * utmp
-      mul!(λtmp, T, utmp2)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
-      # Aλ[:] .= 1
+      mul!(Aλ, T, u)
+      map!((x,y,z) -> x * y - z, Aλ, D, λ, Aλ)
+    end
+    bfun = (b, g, u) -> begin
+      for e = 1:nelems
+        F = factors[e]
+        @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ g[vstarts[e]:(vstarts[e+1]-1)]
+      end
+      mul!(b, T, u)
+      b
+    end
+    ufun = (u, λ) -> begin
     end
 
-    #=
-    utmp = zeros(VNp)
-    CHOLTYPE = typeof(cholesky(sparse([1],[1],[1.0])))
-    VIEWTYPE = typeof(view(utmp, 1:2))
-    factors = Array{Tuple{CHOLTYPE, VIEWTYPE}, 1}(undef, nelems)
-    for e = 1:nelems
-      G = cholesky(Symmetric(lop[e][1]))
-      V = view(utmp, vstarts[e]:(vstarts[e+1]-1))
-      factors[e] = (G, V)
-    end
-    λtmp = zeros(λNp)
-    dd = Vector(diag(D))
-    Afun = (Aλ, λ) -> begin
-      mul!(utmp, Ttranspose, λ)
-      # utmp = M \ utmp
-      for e = 1:nelems
-        G = factors[e][1]
-        v = factors[e][2]
-        v[:] = G \ v
-      end
-      # Aλ[:] = D * λ - T * utmp
-      mul!(λtmp, T, utmp)
-      map!((x,y,z) -> x * y - z, Aλ, dd, λ, λtmp)
-    end
-    =#
-
-    (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
-    @time (λ, iter) = cg(zeros(λNp), T * (M \ g), Afun; MaxIter=λNp, tol = 1e-10)
+    u = zeros(VNp)
+    bλ = zeros(λNp)
+    (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u); MaxIter=λNp, tol = 1e-10)
+    @time (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u); MaxIter=λNp, tol = 1e-10)
     if iter < 0
       println("CG did not converge")
     end
-    u = M \ (g + T' * λ)
+    u[:] = T' * λ
+    u[:] .= g .+ u
+    for e = 1:nelems
+      F = factors[e]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
+    end
     Δ = u - vex(X, Y, E)
-    ϵ[lvl] = sqrt(Δ' * H * Δ)
+    ϵ[lvl] = sqrt(sum(H .* Δ.^2))
     println("level = ", lvl, " :: error = ", ϵ[lvl])
 
     #{{{ Plot the solution
