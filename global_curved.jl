@@ -717,3 +717,74 @@ function testcg(N)
   nothing
 end
 #}}}
+
+#{{{
+if !@isdefined SBPLocalOperator1
+  struct SBPLocalOperator1{T<:Real, S<:Factorization}
+    offset::Array{Int64,1}
+    H::Array{T,1}
+    X::Array{T,1}
+    Y::Array{T,1}
+    E::Array{Int64,1}
+    F::Array{S,1}
+    SBPLocalOperator1{T,S}(vstarts::Array{Int64,1}, H::Array{T,1}, X::Array{T,1},
+                         Y::Array{T,1}, E::Array{Int64,1},
+                         F::Array{S,1}) where {T<:Real, S<:Factorization} =
+      new(vstarts, H, X, Y, E, F)
+  end
+end
+#=
+if !@isdefined GloToLoc
+  struct GloToLoc{S<:AbstractMatrix}
+    T::Array{S,1}
+    vstarts::Array{Int64,1}
+    λstarts::Array{Int64,1}
+    GloToLoc{S}(T::Array{S,1}, vstarts::Array{Int64,1},
+                λstarts::Array{Int64,1}) where {S<:AbstractMatrix} =
+       new(T, vstarts, λstarts)
+  end
+end
+=#
+
+function SBPLocalOperator1(lop, Nr, Ns, factorization)
+  nelems = length(lop)
+  vstarts = Array{Int64, 1}(undef, nelems + 1)
+  vstarts[1] = 1
+  Np = Array{Int64, 1}(undef, nelems)
+  VH = Array{Float64,1}(undef,0)
+  X = Array{Float64,1}(undef,0)
+  Y = Array{Float64,1}(undef,0)
+  E = Array{Int64,1}(undef,0)
+  FTYPE = typeof(factorization(sparse([1],[1],[1.0])))
+  factors = Array{FTYPE, 1}(undef, nelems)
+  for e = 1:nelems
+    # Fill arrays to build global sparse matrix
+    Np[e] = (Nr[e]+1)*(Ns[e]+1)
+    vstarts[e+1] = vstarts[e] + Np[e]
+
+    # Global "mass" matrix
+    H = lop[e][5]
+    VH = [VH;Vector(diag(H))]
+
+    # global coordinates and element number array (needed for jump)
+    x = lop[e][4][1]
+    X = [X;x]
+    y = lop[e][4][2]
+    Y = [Y;y]
+    E = [E;e * ones(Int64, Np[e])]
+
+    factors[e] = factorization(lop[e][1])
+  end
+  VNp = vstarts[nelems+1]-1 # total number of volume points
+
+  SBPLocalOperator1{Float64, FTYPE}(vstarts, VH, X, Y, E, factors)
+end
+#}}}
+
+function LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                              factorization)
+  M = SBPLocalOperator1(lop, Nr, Ns, factorization)
+  (λstarts, T, D) = gloλoperator(lop, M.offset, FToB, FToE, FToLF, EToO, EToS,
+                                 Nr, Ns)
+  (M, T, D, M.offset, λstarts)
+end

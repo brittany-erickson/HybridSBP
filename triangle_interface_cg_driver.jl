@@ -130,14 +130,14 @@ let
 
     # Assemble the global volume operators
     @plotting lvl == 1 && plotmesh(p2, lop, Nr, Ns, EToF, FToB)
-    (vstarts, ~, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
-    VNp = vstarts[nelems+1]-1
+    (M, T, D, vstarts, λstarts) =
+      LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                           (x) -> cholesky(Symmetric(x)))
 
-    # Build the trace operators
-    (λstarts, T, D) = gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS,
-                                   Nr, Ns)
-    Ttranspose = T'
+    VNp = vstarts[nelems+1]-1
     λNp = λstarts[nfaces+1]-1
+    Ttranspose = T'
+
 
     #{{{ Compute the boundary conditions
     bc_Dirichlet = (lf, x, y, e) -> vex(x, y, e)
@@ -158,16 +158,10 @@ let
     #}}}
 
     # factorization = (x) -> lufact(x)
-    factorization = (x) -> cholesky(Symmetric(x))
-    FTYPE = typeof(factorization(sparse([1],[1],[1.0])))
-    factors = Array{FTYPE, 1}(undef, nelems)
-    for e = 1:nelems
-      factors[e] = factorization(lop[e][1])
-    end
     Afun = (Aλ, λ, u) -> begin
       mul!(u, Ttranspose, λ)
       for e = 1:nelems
-        F = factors[e]
+        F = M.F[e]
         @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       end
       mul!(Aλ, T, u)
@@ -175,7 +169,7 @@ let
     end
     bfun = (b, g, u) -> begin
       for e = 1:nelems
-        F = factors[e]
+        F = M.F[e]
         @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ g[vstarts[e]:(vstarts[e+1]-1)]
       end
       mul!(b, T, u)
@@ -186,19 +180,21 @@ let
 
     u = zeros(VNp)
     bλ = zeros(λNp)
-    (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u); MaxIter=λNp, tol = 1e-10)
-    @time (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u); MaxIter=λNp, tol = 1e-10)
+    (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u);
+                   MaxIter=λNp, tol = 1e-10)
+    @time (λ, iter) = cg(zeros(λNp), bfun(bλ, g, u), (x,y) -> Afun(x, y, u);
+                         MaxIter=λNp, tol = 1e-10)
     if iter < 0
       println("CG did not converge")
     end
     u[:] = T' * λ
     u[:] .= g .+ u
     for e = 1:nelems
-      F = factors[e]
+      F = M.F[e]
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
     end
-    Δ = u - vex(X, Y, E)
-    ϵ[lvl] = sqrt(sum(H .* Δ.^2))
+    Δ = u - vex(M.X, M.Y, M.E)
+    ϵ[lvl] = sqrt(sum(M.H .* Δ.^2))
     println("level = ", lvl, " :: error = ", ϵ[lvl])
 
     #{{{ Plot the solution
