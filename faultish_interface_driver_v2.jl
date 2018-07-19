@@ -19,10 +19,6 @@ let
   @assert typeof(EToF) == Array{Int, 2} && size(EToF) == (4, nelems)
   @assert maximum(maximum(EToF)) == nfaces
 
-
-  EToN0 = fill(13, (2, nelems))
-  println(nelems)
-
   # Determine secondary arrays
   # FToE : Unique Global Face to Element Number
   # FToLF: Unique Global Face to Element local face number
@@ -57,17 +53,17 @@ let
   #}}}
 
   p   = 4 # SBP interior order
-  lvl = 2 # Refinement
-
-  # Dictionary to store the operators
-  OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
-  lop = Dict{Int64, OPTYPE}()
+  lvl = 1 # Refinement
 
   # Set up the local grid dimensions
+  EToN0 = fill(13, (2, nelems))
   Nr = EToN0[1, :] * (2^(lvl-1))
   Ns = EToN0[2, :] * (2^(lvl-1))
 
   #{{{ Build the local volume operators
+  # Dictionary to store the operators
+  OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
+  lop = Dict{Int64, OPTYPE}()
   for e = 1:nelems
     # println((e, nelems))
     # Get the element corners
@@ -83,85 +79,23 @@ let
   #}}}
 
   # Assemble the global volume operators
-
-  (M, T, D, vstarts, λstarts) =
+  (M, T, D, vstarts, FToλstarts) =
   LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                        (x) -> cholesky(Symmetric(x)))
+  locfactors = M.F
 
-  jumpstarts = similar(λstarts)
-  jumpstarts[1] = 1
-  for f = 1:nfaces
-    if FToB[f] == BC_JUMP_INTERFACE
-      jumpstarts[f+1] = jumpstarts[f] + (λstarts[f+1]-λstarts[f])
-    else
-      jumpstarts[f+1] = jumpstarts[f]
-    end
-  end
+  # Get a unique array indexes for the face to jumps map
+  FToδstarts = interfacestarts(FToλstarts, FToB, BC_JUMP_INTERFACE)
 
+  # Compute the number of volume, trace (λ), and jump (δ) points
   VNp = vstarts[nelems+1]-1
-  λNp = λstarts[nfaces+1]-1
-  jmpNp = jumpstarts[nfaces+1]-1
-  println((VNp, λNp, jmpNp))
-  Ttranspose = T'
+  λNp = FToλstarts[nfaces+1]-1
+  δNp = FToδstarts[nfaces+1]-1
+  println("(VNp, λNp, δNp) = ", (VNp, λNp, δNp))
 
-  sz = λNp
-  for e = 1:nelems
-    lλs = Array{Int64, 1}(undef, 4)
-    for lf = 1:4
-      f = EToF[lf,e]
-      lλs[lf] = λstarts[f+1] - λstarts[f]
-    end
-    for lf = 1:4
-      sz += lλs[lf]*sum(lλs)
-    end
-  end
-  Ie = Array{Int64, 1}(undef, sz)
-  Je = Array{Int64, 1}(undef, sz)
-  Ve = Array{Float64, 1}(undef, sz)
-  Ie[1:λNp] = 1:λNp
-  Je[1:λNp] = 1:λNp
-  Ve[1:λNp] = D
-  offset = λNp
-  for e = 1:nelems
-    # println((e, nelems))
-    F = M.F[e]
-    vrng = vstarts[e]:(vstarts[e+1]-1)
-    @time for lf = 1:4
-      f = EToF[lf,e]
-      if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] == BC_JUMP_INTERFACE
-        λrng = λstarts[f]:(λstarts[f+1]-1)
-        B = Matrix(F \ Ttranspose[vrng, λrng])
-        for lf2 = 1:4
-          f2 = EToF[lf2,e]
-          if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] == BC_JUMP_INTERFACE
-            λrng2 = λstarts[f2]:(λstarts[f2+1]-1)
-            C = T[λrng2, vrng] * B
-            λblck = λrng*ones(Int64, 1, length(λrng2))
-            λblck2 = ones(Int64, length(λrng), 1) * λrng2'
-            last = length(λrng) * length(λrng2)
-            Ie[offset.+(1:last)] = λblck[:]
-            Je[offset.+(1:last)] = λblck2[:]
-            Ve[offset.+(1:last)] = -C'[:]
-            offset += last
-          end
-        end
-      end
-    end
-  end
-  @assert offset == sz
-  @time B = sparse(Ie, Je, Ve, λNp, λNp)
-  @assert B ≈ B'
-  println((λNp * λNp, nnz(B), nnz(B) / λNp^2))
-  @time BF = cholesky(Symmetric(B))
-
-  bfun = (b, g, u) -> begin
-    for e = 1:nelems
-      F = M.F[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ g[vstarts[e]:(vstarts[e+1]-1)]
-    end
-    mul!(b, T, u)
-    b
-  end
+  # Build the (sparse) λ matrix using the schur complement and factor
+  B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
+  BF = cholesky(Symmetric(B))
 
   bλ = zeros(λNp)
   λ = zeros(λNp)
@@ -169,52 +103,57 @@ let
   g = zeros(VNp)
 
   #{{{ Compute the boundary conditions
-  δ = ones(jmpNp)
+  δ = zeros(δNp)
   W = 40
   bc_Dirichlet = (lf, x, y, e, t) -> zeros(size(x))
   bc_Neumann   = (lf, x, y, nx, ny, e, t) -> zeros(size(x))
   in_jump      = (lf, x, y, e, t) -> begin
     f = EToF[lf, e]
     if EToS[lf, e] == 1
-      return δ[jumpstarts[f]:(jumpstarts[f+1]-1)]
+      return δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
     else
-      return -δ[jumpstarts[f]:(jumpstarts[f+1]-1)]
+      return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
     end
   end
   #}}}
 
   λ[:] .= 0
-  # for t = linspace(0,1,10)
-  for t = 1
+  for t = linspace(0,1,10)
+  # for t = 0
+    δ[:] .= t
     for e = 1:nelems
       locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
                   bc_Dirichlet, bc_Neumann, in_jump, (e,t))
     end
-    λ[:] = BF \ bfun(bλ, g, u)
-  end
+    LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts)
+    λ[:] = BF \ bλ
 
-  u[:] = T' * λ
-  u[:] .= g .+ u
-  for e = 1:nelems
-    F = M.F[e]
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
-  end
-
-  @plotting let
-    clims = (minimum(u), maximum(u))
+    u[:] = T' * λ
+    u[:] .= g .+ u
     for e = 1:nelems
-      (x, y) = lop[e][4]
-      up = u[vstarts[e]:(vstarts[e+1]-1)]
-      plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
-            reshape(y, Nr[e]+1, Ns[e]+1),
-            reshape(up, Nr[e]+1, Ns[e]+1),
-            st = :surface, c = :balance, clims = clims)
+      F = locfactors[e]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
     end
-    # plot!(p2, aspect_ratio = 1, camera = (0, 90))
-    # plot!(p2, aspect_ratio = 1)
-    plot!(p2, aspect_ratio = 1, camera = (45, 45))
 
-    @plotting display(plot(p1, p2, layout = (2,1)))
+    @plotting let
+      clims = (minimum(u), maximum(u))
+      p2 = plot()
+      for e = 1:nelems
+        (x, y) = lop[e][4]
+        up = u[vstarts[e]:(vstarts[e+1]-1)]
+        plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
+              reshape(y, Nr[e]+1, Ns[e]+1),
+              reshape(up, Nr[e]+1, Ns[e]+1),
+              st = :surface, c = :balance, clims = clims)
+      end
+      # plot!(p2, aspect_ratio = 1, camera = (0, 90))
+      # plot!(p2, aspect_ratio = 1)
+      plot!(p2, aspect_ratio = 1, camera = (45, 45))
+
+      display(plot(p1, p2, layout = (2,1), size = (2500, 1500)))
+      println(t)
+      sleep(1)
+    end
   end
   nothing
 end

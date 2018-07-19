@@ -556,27 +556,27 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
   nelems = length(lop)
   nfaces = length(FToB)
   Nλp = zeros(Int64, nfaces)
-  λstarts = Array{Int64, 1}(undef, nfaces + 1)
-  λstarts[1] = 1
+  FToλstarts = Array{Int64, 1}(undef, nfaces + 1)
+  FToλstarts[1] = 1
   IT = Array{Int64,1}(undef,0)
   JT = Array{Int64,1}(undef,0)
   VT = Array{Float64,1}(undef,0)
   VD = Array{Float64,1}(undef,0)
   for f = 1:nfaces
     if FToB[f] == BC_DIRICHLET || FToB[f] == BC_NEUMANN
-      λstarts[f+1] = λstarts[f]
+      FToλstarts[f+1] = FToλstarts[f]
       continue
     end
     (em, ep) = FToE[:, f]
     (fm, fp) = FToLF[:, f]
     Nλp[f] = (fm <= 2 ? Ns[em]+1 : Nr[em]+1)
     @assert Nλp[f] == (fp <= 2 ? Ns[ep]+1 : Nr[ep]+1)
-    λstarts[f+1] = λstarts[f] + Nλp[f]
+    FToλstarts[f+1] = FToλstarts[f] + Nλp[f]
 
     @assert EToO[fm, em] && EToS[fm, em] == 1
     Fm = lop[em][2][fm]
     (Ie, Je, Ve) = findnz(Fm)
-    IT = [IT; Ie .+ (λstarts[f] - 1)]
+    IT = [IT; Ie .+ (FToλstarts[f] - 1)]
     JT = [JT; Je .+ (vstarts[em] - 1)]
     VT = [VT; Ve]
 
@@ -585,12 +585,12 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
     (Ie, Je, Ve) = findnz(Fp)
     # if element and face orientation do not match, then flip
     if EToO[fp, ep]
-      IT = [IT; Ie .+ (λstarts[f] - 1)]
+      IT = [IT; Ie .+ (FToλstarts[f] - 1)]
       @assert lop[em][11][fm] ≈ lop[ep][11][fp]
       @assert lop[em][6][fm] ≈ lop[ep][6][fp]
       @assert lop[em][9][fm] ≈ lop[ep][9][fp]
     else
-      IT = [IT; λstarts[f+1] .- Ie]
+      IT = [IT; FToλstarts[f+1] .- Ie]
       @assert lop[em][11][fm] ≈ rot180(lop[ep][11][fp])
       @assert lop[em][6][fm] ≈ lop[ep][6][fp][end:-1:1]
       @assert lop[em][9][fm] ≈ rot180(lop[ep][9][fp])
@@ -604,11 +604,11 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
     VD = [VD; 2 * sJf .* Hf .* τf]
 
   end
-  λNp = λstarts[nfaces+1]-1
+  λNp = FToλstarts[nfaces+1]-1
   VNp = vstarts[nelems+1]-1
   T = sparse(IT, JT, VT, λNp, VNp)
   # Ttranspose = sparse(JT, IT, VT, VNp, λNp)
-  (λstarts, T, VD)
+  (FToλstarts, T, VD)
 end
 #}}}
 
@@ -742,10 +742,10 @@ if !@isdefined GloToLoc
   struct GloToLoc{S<:AbstractMatrix}
     T::Array{S,1}
     vstarts::Array{Int64,1}
-    λstarts::Array{Int64,1}
+    FToλstarts::Array{Int64,1}
     GloToLoc{S}(T::Array{S,1}, vstarts::Array{Int64,1},
-                λstarts::Array{Int64,1}) where {S<:AbstractMatrix} =
-       new(T, vstarts, λstarts)
+                FToλstarts::Array{Int64,1}) where {S<:AbstractMatrix} =
+       new(T, vstarts, FToλstarts)
   end
 end
 =#
@@ -788,10 +788,82 @@ end
 function LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                               factorization)
   M = SBPLocalOperator1(lop, Nr, Ns, factorization)
-  (λstarts, T, D) = gloλoperator(lop, M.offset, FToB, FToE, FToLF, EToO, EToS,
+  (FToλstarts, T, D) = gloλoperator(lop, M.offset, FToB, FToE, FToLF, EToO, EToS,
                                  Nr, Ns)
-  (M, T, D, M.offset, λstarts)
+  (M, T, D, M.offset, FToλstarts)
 end
+
+function interfacestarts(FToλstarts, FToB, INFLAG)
+  instarts = similar(FToλstarts)
+  instarts[1] = 1
+  for f = 1:length(FToλstarts)-1
+    if FToB[f] == INFLAG
+      instarts[f+1] = instarts[f] + (FToλstarts[f+1]-FToλstarts[f])
+    else
+      instarts[f+1] = instarts[f]
+    end
+  end
+  instarts
+end
+
+#{{{ assembleλmatrix: Schur complement system
+function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
+  nfaces = length(FToλstarts)-1
+  nelems = length(vstarts)-1
+  λNp = FToλstarts[nfaces+1]-1
+  sz = λNp
+
+  for e = 1:nelems
+    lλs = Array{Int64, 1}(undef, 4)
+    for lf = 1:4
+      f = EToF[lf,e]
+      lλs[lf] = FToλstarts[f+1] - FToλstarts[f]
+    end
+    for lf = 1:4
+      sz += lλs[lf]*sum(lλs)
+    end
+  end
+  Ie = Array{Int64, 1}(undef, sz)
+  Je = Array{Int64, 1}(undef, sz)
+  Ve = Array{Float64, 1}(undef, sz)
+  Ie[1:λNp] = 1:λNp
+  Je[1:λNp] = 1:λNp
+  Ve[1:λNp] = D
+  offset = λNp
+  Ttranspose = T'
+  for e = 1:nelems
+    # println((e, nelems))
+    vrng = vstarts[e]:(vstarts[e+1]-1)
+    for lf = 1:4
+      f = EToF[lf,e]
+      if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] == BC_JUMP_INTERFACE
+        λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
+        B = Matrix(F[e] \ Ttranspose[vrng, λrng])
+        for lf2 = 1:4
+          f2 = EToF[lf2,e]
+          if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] == BC_JUMP_INTERFACE
+            λrng2 = FToλstarts[f2]:(FToλstarts[f2+1]-1)
+            C = T[λrng2, vrng] * B
+            λblck = λrng*ones(Int64, 1, length(λrng2))
+            λblck2 = ones(Int64, length(λrng), 1) * λrng2'
+            last = length(λrng) * length(λrng2)
+            Ie[offset.+(1:last)] = λblck[:]
+            Je[offset.+(1:last)] = λblck2[:]
+            Ve[offset.+(1:last)] = -C'[:]
+            offset += last
+          end
+        end
+      end
+    end
+  end
+  @assert offset == sz
+  B = sparse(Ie, Je, Ve, λNp, λNp)
+  @assert B ≈ B'
+  # println((λNp * λNp, nnz(B), nnz(B) / λNp^2))
+  B
+end
+
+#}}}
 
 # {{{ Constructor for inp files
 function read_inp_2d(T, S, filename::String)
@@ -885,6 +957,7 @@ function read_inp_2d(T, S, filename::String)
       end
     end
   end
+  #}}}
 
   # {{{ Read in side set info
   FToB = Array{T, 1}(undef, numfaces)
@@ -937,3 +1010,12 @@ function SeekToSubstring(lines, substring; first=1)
 end
 
 # }}}
+
+function LocalToGLobalRHS!(b, g, u, F, T, vstarts)
+  for e = 1:length(F)
+    @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+  end
+  mul!(b, T, u)
+  b
+end
+
