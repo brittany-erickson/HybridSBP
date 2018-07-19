@@ -76,6 +76,7 @@ refine curve 8 22 23 10 numsplit 1 bias 1.0 depth 0 smooth
 surface 4 5 size {a}
 mesh surface 4 5
 
+refine curve 18 19 20 numsplit 2 bias 1.0 depth 1 smooth
 
 Sideset 1 add curve 2 4               # Displacement (half V_p)
 Sideset 2 add curve 26 27 12 13 21 24 # Free
