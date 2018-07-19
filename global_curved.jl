@@ -793,18 +793,22 @@ function LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
   (M, T, D, M.offset, FToλstarts)
 end
 
-function interfacestarts(FToλstarts, FToB, INFLAG)
-  instarts = similar(FToλstarts)
-  instarts[1] = 1
-  for f = 1:length(FToλstarts)-1
-    if FToB[f] == INFLAG
-      instarts[f+1] = instarts[f] + (FToλstarts[f+1]-FToλstarts[f])
+function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
+  nfaces = length(FToB)
+  bcstarts = Array{Int64, 1}(undef, nfaces + 1)
+  bcstarts[1] = 1
+  for f = 1:nfaces
+    if FToB[f] == bc_type
+      e  = FToE[1,f]
+      lf = FToLF[1,f]
+      bcstarts[f+1] = bcstarts[f] + (lf ∈ (1,2) ? Ns[e] : Nr[e]) + 1
     else
-      instarts[f+1] = instarts[f]
+      bcstarts[f+1] = bcstarts[f]
     end
   end
-  instarts
+  bcstarts
 end
+
 
 #{{{ assembleλmatrix: Schur complement system
 function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)

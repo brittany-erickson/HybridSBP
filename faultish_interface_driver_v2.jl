@@ -85,7 +85,7 @@ let
   locfactors = M.F
 
   # Get a unique array indexes for the face to jumps map
-  FToδstarts = interfacestarts(FToλstarts, FToB, BC_JUMP_INTERFACE)
+  FToδstarts = bcstarts(FToB, FToE, FToLF, BC_JUMP_INTERFACE, Nr, Ns)
 
   # Compute the number of volume, trace (λ), and jump (δ) points
   VNp = vstarts[nelems+1]-1
@@ -97,14 +97,13 @@ let
   B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
   BF = cholesky(Symmetric(B))
 
-  bλ = zeros(λNp)
-  λ = zeros(λNp)
-  u = zeros(VNp)
-  g = zeros(VNp)
+  # Set up some needed arrays
+  (bλ, λ, u, g) = (zeros(λNp), zeros(λNp), zeros(VNp), zeros(VNp))
 
-  #{{{ Compute the boundary conditions
+  # array of jumps
   δ = zeros(δNp)
-  W = 40
+
+  #{{{ Compute the funtions
   bc_Dirichlet = (lf, x, y, e, t) -> zeros(size(x))
   bc_Neumann   = (lf, x, y, nx, ny, e, t) -> zeros(size(x))
   in_jump      = (lf, x, y, e, t) -> begin
