@@ -3,7 +3,7 @@ include("global_curved.jl")
 if VERSION <= v"0.6.999999"
   ldiv! = A_ldiv_B!
   cholesky = cholfact
-  using CholmodSolve2
+  # using CholmodSolve2
 end
 
 let
