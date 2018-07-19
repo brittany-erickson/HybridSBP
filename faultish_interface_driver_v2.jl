@@ -19,18 +19,6 @@ let
   @assert typeof(EToF) == Array{Int, 2} && size(EToF) == (4, nelems)
   @assert maximum(maximum(EToF)) == nfaces
 
-  #{{{ Plot the connectivity using vertices corners
-  @plotting (p1, p2, p3) = (plot(), plot(), plot())
-  @plotting let
-    # Do some plotting
-    scatter!(p1, verts[1,:], verts[2,:], marker=1, legend=:none)
-    for e = 1:nelems
-      plot!(p1, verts[1, EToV[[1 2 4 3 1], e]]',
-            verts[2, EToV[[1 2 4 3 1], e]]', legend=:none)
-    end
-    plot!(p1, aspect_ratio = 1)
-  end
-  #}}}
 
   EToN0 = fill(13, (2, nelems))
   println(nelems)
@@ -42,8 +30,34 @@ let
   # EToS : Element to Unique Global Face Side
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
+  #{{{ Plot the connectivity using vertices corners
+  @plotting (p1, p2, p3) = (plot(), plot(), plot())
+  @plotting let
+    # Do some plotting
+    scatter!(p1, verts[1,:], verts[2,:], marker=1, legend=:none)
+    LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
+    for f = 1:nfaces
+      e  = FToE[1,f]
+      lf = FToLF[1,f]
+      V = EToV[LFToLV[:,lf], e]
+      if FToB[f] == BC_DIRICHLET
+        plot!(p1, verts[1, V], verts[2, V], color=:red, linewidth=3)
+      elseif FToB[f] == BC_NEUMANN
+        plot!(p1, verts[1, V], verts[2, V], color=:blue, linewidth=3)
+      elseif FToB[f] == BC_LOCKED_INTERFACE
+        plot!(p1, verts[1, V], verts[2, V], color=:black, linewidth=1)
+      elseif FToB[f] == BC_JUMP_INTERFACE
+        plot!(p1, verts[1, V], verts[2, V], color=:green, linewidth=3)
+      else
+        error("invalid bc")
+      end
+    end
+    plot!(p1, aspect_ratio = 1)
+  end
+  #}}}
+
   p   = 4 # SBP interior order
-  lvl = 5 # Refinement
+  lvl = 2 # Refinement
 
   # Dictionary to store the operators
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
@@ -55,6 +69,7 @@ let
 
   #{{{ Build the local volume operators
   for e = 1:nelems
+    # println((e, nelems))
     # Get the element corners
     (x1, x2, x3, x4) = verts[1, EToV[:, e]]
     (y1, y2, y3, y4) = verts[2, EToV[:, e]]
@@ -68,17 +83,25 @@ let
   #}}}
 
   # Assemble the global volume operators
-  @plotting lvl == 1 && let
-    plotmesh(p2, lop, Nr, Ns, EToF, FToB)
-    plot!(p2, aspect_ratio = 1)
-  end
 
   (M, T, D, vstarts, λstarts) =
   LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                        (x) -> cholesky(Symmetric(x)))
+
+  jumpstarts = similar(λstarts)
+  jumpstarts[1] = 1
+  for f = 1:nfaces
+    if FToB[f] == BC_JUMP_INTERFACE
+      jumpstarts[f+1] = jumpstarts[f] + (λstarts[f+1]-λstarts[f])
+    else
+      jumpstarts[f+1] = jumpstarts[f]
+    end
+  end
+
   VNp = vstarts[nelems+1]-1
   λNp = λstarts[nfaces+1]-1
-  println((VNp, λNp))
+  jmpNp = jumpstarts[nfaces+1]-1
+  println((VNp, λNp, jmpNp))
   Ttranspose = T'
 
   sz = λNp
@@ -100,6 +123,7 @@ let
   Ve[1:λNp] = D
   offset = λNp
   for e = 1:nelems
+    # println((e, nelems))
     F = M.F[e]
     vrng = vstarts[e]:(vstarts[e+1]-1)
     @time for lf = 1:4
@@ -142,16 +166,22 @@ let
   bλ = zeros(λNp)
   λ = zeros(λNp)
   u = zeros(VNp)
+  g = zeros(VNp)
 
   #{{{ Compute the boundary conditions
+  δ = ones(jmpNp)
   W = 40
   bc_Dirichlet = (lf, x, y, e, t) -> zeros(size(x))
   bc_Neumann   = (lf, x, y, nx, ny, e, t) -> zeros(size(x))
-  in_jump      = (lf, x, y, e, t) -> (EToS[lf, e] == 1 ? t : -t) * (y/W .+ 1)
-  bc_Dirichlet = (lf, x, y, e, t) -> x
-  in_jump      = (lf, x, y, e, t) -> zeros(size(x))
-
-  g = zeros(VNp)
+  in_jump      = (lf, x, y, e, t) -> begin
+    f = EToF[lf, e]
+    if EToS[lf, e] == 1
+      return δ[jumpstarts[f]:(jumpstarts[f+1]-1)]
+    else
+      return -δ[jumpstarts[f]:(jumpstarts[f+1]-1)]
+    end
+  end
+  #}}}
 
   λ[:] .= 0
   # for t = linspace(0,1,10)
@@ -169,22 +199,22 @@ let
     F = M.F[e]
     @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
   end
-  #}}}
 
-  @plotting lvl == 1 && let
+  @plotting let
     clims = (minimum(u), maximum(u))
     for e = 1:nelems
       (x, y) = lop[e][4]
       up = u[vstarts[e]:(vstarts[e+1]-1)]
-      plot!(p3, reshape(x, Nr[e]+1, Ns[e]+1),
+      plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
             reshape(y, Nr[e]+1, Ns[e]+1),
             reshape(up, Nr[e]+1, Ns[e]+1),
             st = :surface, c = :balance, clims = clims)
     end
-    # plot!(p3, aspect_ratio = 1, camera = (0, 90))
-    # plot!(p3, aspect_ratio = 1)
-    plot!(p3, aspect_ratio = 1, camera = (45, 45))
+    # plot!(p2, aspect_ratio = 1, camera = (0, 90))
+    # plot!(p2, aspect_ratio = 1)
+    plot!(p2, aspect_ratio = 1, camera = (45, 45))
 
-    @plotting display(plot(p1, p2, p3, layout = (3,1)))
+    @plotting display(plot(p1, p2, layout = (2,1)))
   end
+  nothing
 end
