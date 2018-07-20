@@ -5,11 +5,12 @@ if VERSION <= v"0.6.999999"
   cholesky = cholfact
   # using CholmodSolve2
 end
+using DifferentialEquations
 
 let
 
   # This is just needed because functions below expect arrays
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower.inp")
+  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower_v2.inp")
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
@@ -102,13 +103,10 @@ let
   # Set up some needed arrays
   (bλ, λ, u, g) = (zeros(λNp), zeros(λNp), zeros(VNp), zeros(VNp))
 
-  # array of jumps
-  δ = zeros(δNp)
-
   #{{{ Compute the funtions
-  bc_Dirichlet = (lf, x, y, e,) -> zeros(size(x))
-  bc_Neumann   = (lf, x, y, nx, ny, e,) -> zeros(size(x))
-  in_jump      = (lf, x, y, e,) -> begin
+  bc_Dirichlet = (lf, x, y, e, δ) -> sign.(x) * 50
+  bc_Neumann   = (lf, x, y, nx, ny, e, δ) -> zeros(size(x))
+  in_jump      = (lf, x, y, e, δ) -> begin
     f = EToF[lf, e]
     if EToS[lf, e] == 1
       return δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
@@ -118,21 +116,75 @@ let
   end
   #}}}
 
-  λ[:] .= 0
-  δ[:] .= 1
-  for e = 1:nelems
-    locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
-                bc_Dirichlet, bc_Neumann, in_jump, (e,))
+  # lithostatic normal stress
+  ρ = 3000
+  gravity = 10
+  σn = 10*ones(δNp)
+  for f = 1:nfaces
+    if FToB[f] == BC_JUMP_INTERFACE
+      e  = FToE[ 1, f]
+      lf = FToLF[1, f]
+      (~, ~, L, (~, y), ~, ~, ~, ~, ~, ~, ~) = lop[e]
+      δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+      σn[δrng] = -1e-3 * ρ * gravity * (L[lf] * y)
+    end
   end
-  LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts)
-  λ[:] = BF \ bλ
+  μ = 0.6
+  shear_modulus = 30
+  cs = √(shear_modulus/(ρ * 1e-3))
+  η = shear_modulus / (2 * cs)
 
-  u[:] = T' * λ
-  u[:] .= g .+ u
-  for e = 1:nelems
-    F = locfactors[e]
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
+  # array of jumps
+
+  odefun(V, δ, p, t) = begin
+    for e = 1:nelems
+      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
+                  bc_Dirichlet, bc_Neumann, in_jump, (e,δ))
+    end
+    LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts)
+    λ[:] = BF \ bλ
+
+    u[:] = T' * λ
+    u[:] .= g .+ u
+    for e = 1:nelems
+      F = locfactors[e]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
+    end
+
+    # Compute the shear-traction and update velocity
+    for f = 1:nfaces
+      if FToB[f] == BC_JUMP_INTERFACE
+        (e1, e2) = FToE[:, f]
+        (lf1, lf2) = FToLF[:, f]
+        (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
+
+        Tz1 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF)
+        # Tz2 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
+        # println(Tz1 ≈ -Tz2)
+
+        δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+        V[δrng] = sign.(Tz1) .* max.(0, (abs.(Tz1) * shear_modulus - μ * σn[δrng]) / η)
+      end
+    end
+    println(t)
+    println(maximum(V))
+    V
   end
+  δ = zeros(δNp)
+  #=
+  sol = solve(SteadyStateProblem(odefun, δ))
+  δ[:] = sol.u[:]
+  =#
+
+  tspan = (0.0, 0.01)
+  prob = ODEProblem(odefun, δ, tspan)
+  sol = solve(prob,reltol=1e-8,abstol=1e-8)
+  δ = sol.u[end]
+
+  V = zeros(δNp)
+  odefun(V, δ, (), ())
+  println(V)
+  println(δ)
 
   @plotting let
     clims = (minimum(u), maximum(u))

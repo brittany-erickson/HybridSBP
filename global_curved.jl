@@ -1023,3 +1023,24 @@ function LocalToGLobalRHS!(b, g, u, F, T, vstarts)
   b
 end
 
+# If EToO is present, then the traction on side 2 is computed (should be equal
+# and opposite to side 1!)
+function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ())
+  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+  if isempty(EToO)
+    (~, F, ~, ~, ~, sJ, ~, ~, ~, HfI, τ) = lop[e1]
+    vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+    vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
+    return τ[lf1] * vλ - vol
+  else
+    (~, F, ~, ~, ~, sJ, ~, ~, ~, HfI, τ) = lop[e2]
+    vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
+    vol = (HfI[lf2] * (F[lf2] * vu)) ./ (sJ[lf2])
+    if !EToO[lf2,e2]
+      vol = vol[end:-1:1]
+    end
+    return τ[lf2] * vλ - vol
+  end
+end

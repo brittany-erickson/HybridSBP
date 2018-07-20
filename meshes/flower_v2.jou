@@ -1,0 +1,60 @@
+# RUN WITH CUBIT 15.2
+
+# Set units to SI.
+${Units('si')}
+
+#---------------
+reset
+
+${Lx=15}
+${Ly=15}
+
+create surface rectangle width {2*Lx} height {Ly} zplane 
+move Surface 1  location 0 {-Ly/2} 0 include_merged
+
+create vertex  0       0    0
+create vertex  0.2    -1.5  0
+create vertex  0.3    -4    0
+create vertex  0      -8    0
+create vertex  -5   {-Ly}   0
+
+create curve spline vertex 5 6 7 8 9
+
+create vertex  -5 0  0
+create vertex  -3 -5  0
+create curve spline vertex 10 11 8 delete
+
+create vertex  -2 0  0
+create vertex  -1.5 -2  0
+create curve spline vertex 12 13 7 delete
+
+create vertex   1 0  0
+create curve vertex 6 14 delete
+
+create vertex   4  0  0
+create vertex   4 -2  0
+create curve spline vertex 15 16 8 delete
+
+imprint tolerant surface 1 with curve 5 6 7 8 9 merge
+delete curve 5 6 7 8 9
+
+surface 7  size 3
+mesh surface 7
+surface 6  size 3
+mesh surface 6
+surface 4  size 3
+mesh surface 4
+surface 2  size 3
+mesh surface 2
+surface 1  size 3
+mesh surface 1
+surface 5  size 3
+mesh surface 5
+surface 3  size 3
+mesh surface 3
+
+Sideset 1 add curve 2 4                      # Displacement (half V_p)
+Sideset 2 add curve 11 17 25 24 19 22 16 21  # Free
+Sideset 7 add curve 15 13 23 12 10 14 18 20  # Frictional fault
+
+export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/flower_v2.inp"  overwrite

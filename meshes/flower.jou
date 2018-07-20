@@ -14,14 +14,14 @@ move Surface 1  location 0 {-Ly/2} 0 include_merged
 
 create vertex  0    0  0
 create vertex  0 {-Ly} 0
-create vertex  2   -3  0
-create vertex  4   -4  0
-create vertex -2    0  0
+create vertex  2.5   -3  0
+create vertex  4   -8  0
+create vertex -1    0  0
 create vertex -4    0  0
 create vertex  0   -6  0
 create vertex  0  -10  0
 create vertex  0  -12  0
-create vertex  2    0  0
+create vertex  2.5    0  0
 create vertex  4    0  0
 
 create curve vertex  5  6
@@ -54,5 +54,6 @@ mesh surface 5
 Sideset 1 add curve 2 4                      # Displacement (half V_p)
 Sideset 2 add curve 26 20 21 22 31 30 28 25  # Free
 Sideset 7 add curve 15 19 18 16 14 29 27 24  # Frictional fault
+# Sideset 7 add curve 19 18 15 29   # Frictional fault
 
 export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/flower.inp"  overwrite
