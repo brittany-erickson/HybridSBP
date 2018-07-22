@@ -104,9 +104,12 @@ let
   (bλ, λ, u, g) = (zeros(λNp), zeros(λNp), zeros(VNp), zeros(VNp))
 
   #{{{ Compute the funtions
-  bc_Dirichlet = (lf, x, y, e, δ) -> sign.(x) * 50
-  bc_Neumann   = (lf, x, y, nx, ny, e, δ) -> zeros(size(x))
-  in_jump      = (lf, x, y, e, δ) -> begin
+  Lx = 15
+  hz = 75
+  ulinear(x,y) = (hz / Lx) * x
+  bc_Dirichlet = (lf, x, y, e, δ, t) -> ulinear(x,y)
+  bc_Neumann   = (lf, x, y, nx, ny, e, δ, t) -> zeros(size(x))
+  in_jump      = (lf, x, y, e, δ, t) -> begin
     f = EToF[lf, e]
     if EToS[lf, e] == 1
       return δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
@@ -116,10 +119,11 @@ let
   end
   #}}}
 
-  # lithostatic normal stress
+  #{{{ lithostatic normal stress
   ρ = 3000
   gravity = 10
-  σn = 10*ones(δNp)
+  σn = 50*ones(δNp)
+  #=
   for f = 1:nfaces
     if FToB[f] == BC_JUMP_INTERFACE
       e  = FToE[ 1, f]
@@ -129,17 +133,18 @@ let
       σn[δrng] = -1e-3 * ρ * gravity * (L[lf] * y)
     end
   end
+  =#
   μ = 0.6
   shear_modulus = 30
   cs = √(shear_modulus/(ρ * 1e-3))
   η = shear_modulus / (2 * cs)
+  #}}}
 
   # array of jumps
-
   odefun(V, δ, p, t) = begin
     for e = 1:nelems
       locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
-                  bc_Dirichlet, bc_Neumann, in_jump, (e,δ))
+                  bc_Dirichlet, bc_Neumann, in_jump, (e, δ, t))
     end
     LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts)
     λ[:] = BF \ bλ
@@ -152,22 +157,23 @@ let
     end
 
     # Compute the shear-traction and update velocity
+    mTz1 = 0
     for f = 1:nfaces
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
         (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
 
-        Tz1 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF)
+        Tz1 = shear_modulus * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF)
         # Tz2 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
         # println(Tz1 ≈ -Tz2)
 
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
-        V[δrng] = sign.(Tz1) .* max.(0, (abs.(Tz1) * shear_modulus - μ * σn[δrng]) / η)
+        V[δrng] = sign.(Tz1) .* max.(0, (abs.(Tz1) - μ * σn[δrng]) / η)
+        mTz1 = max(mTz1, maximum(abs.(Tz1)))
       end
     end
-    println(t)
-    println(maximum(V))
+    println((t, maximum(V), mTz1))
     V
   end
   δ = zeros(δNp)
@@ -176,32 +182,43 @@ let
   δ[:] = sol.u[:]
   =#
 
-  tspan = (0.0, 0.01)
+  tspan = (0.0, 20.0)
   prob = ODEProblem(odefun, δ, tspan)
-  sol = solve(prob,reltol=1e-8,abstol=1e-8)
+  sol = solve(prob,Tsit5(), reltol=1e-8,abstol=1e-8)
   δ = sol.u[end]
 
   V = zeros(δNp)
-  odefun(V, δ, (), ())
+  odefun(V, δ, (), tspan[end])
   println(V)
   println(δ)
 
   @plotting let
-    clims = (minimum(u), maximum(u))
+    #=
+    mx = 0.0
+    mn = 0.0
+    for e = 1:nelems
+      (x, y) = lop[e][4]
+      Δu = u[vstarts[e]:(vstarts[e+1]-1)] - ulinear(x,y)
+      mn = min(mn, minimum(Δu))
+      mx = max(mx, maximum(Δu))
+    end
+    =#
+    mx = maximum(abs.(δ))
+    clims = (-mx, mx)
     p2 = plot()
     for e = 1:nelems
       (x, y) = lop[e][4]
-      up = u[vstarts[e]:(vstarts[e+1]-1)]
+      Δu = u[vstarts[e]:(vstarts[e+1]-1)] - ulinear(x,y)
       plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
             reshape(y, Nr[e]+1, Ns[e]+1),
-            reshape(up, Nr[e]+1, Ns[e]+1),
-            st = :surface, c = :darkrainbow, clims = clims)
+            reshape(Δu, Nr[e]+1, Ns[e]+1),
+            st = :surface, c = :balance, clims = clims)
     end
     plot!(p2, aspect_ratio = 1, camera = (0, 90))
     # plot!(p2, aspect_ratio = 1)
     # plot!(p2, aspect_ratio = 1, camera = (45, 45))
 
-    display(plot(p1, p2, layout = (2,1), size = (2500, 1500)))
+    display(plot(p1, p2, layout = (2,1), size = (1400, 800)))
   end
   nothing
 end
