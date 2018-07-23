@@ -9,12 +9,104 @@ using DifferentialEquations
 
 let
 
-  # This is just needed because functions below expect arrays
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower_v2.inp")
+  # (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower_v2.inp")
+
+  #=
+  verts = ((-15,   0), (0,   0), (15,   0),
+           (-15, -15), (0, -15), (15, -15))
+  EToV = ((4, 5, 1, 2), (5, 6, 2, 3))
+  EToF = ((1, 2, 3, 4), (2, 5, 6, 7))
+
+  EToV = ((5, 6, 2, 3), (4, 5, 1, 2))
+  EToF = ((2, 5, 6, 7), (1, 2, 3, 4))
+
+  EToV = ((6, 3, 5, 2), (2, 1, 5, 4))
+  EToF = ((6, 7, 5, 2), (2, 1, 4, 3))
+
+  FToB = (BC_DIRICHLET,
+          BC_JUMP_INTERFACE,
+          BC_NEUMANN,
+          BC_NEUMANN,
+          BC_DIRICHLET,
+          BC_NEUMANN,
+          BC_NEUMANN)
+  =#
+
+  verts = ((-15,   0),           (0,   0), (10,  0), (15,   0),
+                       (-5, -5), (0,  -5), (10, -5),
+           (-15, -15), (-5,-15), (0, -15),           (15, -15))
+  EToV = (( 8,  9,  1,  5),
+          ( 9, 10,  5,  6),
+          (10, 11,  6,  7),
+          ( 7, 11,  3,  4),
+          ( 6,  7,  2,  3),
+          ( 5,  6,  1,  2))
+  EToF = ((1, 2, 3, 4),
+          (2, 5, 6, 7),
+          (5, 8, 9, 10),
+          (12, 13, 8, 11),
+          (14, 12, 10, 15),
+          (4, 14, 7, 16))
+  FToB = fill(BC_LOCKED_INTERFACE, (16,))
+  for f ∈ (1, 13)
+    FToB[f] = BC_DIRICHLET
+  end
+  for f ∈ (3, 6, 9, 16, 15, 11)
+    FToB[f] = BC_NEUMANN
+  end
+  for f ∈ (5, 14)
+    FToB[f] = BC_JUMP_INTERFACE
+  end
+
+  #=
+  verts = ((-15,   0), (0,   0), (15,   0),
+           (-15, -5), (0, -5), (15, -5),
+           (-15, -15), (0, -15), (15, -15))
+  EToV = ((4, 5, 1, 2),
+          (5, 6, 2, 3),
+          (7, 8, 4, 5),
+          (8, 9, 5, 6))
+  EToF = ((1, 2, 3, 4),
+          (2, 5, 6, 7),
+          (8, 9, 10, 3),
+          (9, 11, 12, 6))
+
+
+  FToB = (BC_DIRICHLET,
+          BC_JUMP_INTERFACE,
+          BC_LOCKED_INTERFACE,
+          BC_NEUMANN,
+          BC_DIRICHLET,
+          BC_LOCKED_INTERFACE,
+          BC_NEUMANN,
+          BC_DIRICHLET,
+          BC_JUMP_INTERFACE,
+          BC_NEUMANN,
+          BC_DIRICHLET,
+          BC_NEUMANN)
+  =#
+
+
+  verts = flatten_tuples(verts)
+  EToV  = flatten_tuples(EToV)
+  EToF  = flatten_tuples(EToF)
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
   println("(nelems, nfaces) = ", (nelems, nfaces))
+  #=
+  @plotting (p1, p2, p3) = (plot(), plot(), plot())
+  @plotting let
+    # Do some plotting
+    scatter!(p1, verts[1,:], verts[2,:], marker=1, legend=:none)
+    display(plot!(p1, aspect_ratio = 1))
+    for e = 1:nelems
+      V = EToV[:, e]
+      plot!(p1, verts[1, V], verts[2, V], linewidth=3)
+    end
+    display(plot!(p1, aspect_ratio = 1))
+  end
+  =#
 
   # Some sanity checks
   @assert typeof(EToV) == Array{Int, 2} && size(EToV) == (4, nelems)
@@ -214,7 +306,7 @@ let
             reshape(Δu, Nr[e]+1, Ns[e]+1),
             st = :surface, c = :balance, clims = clims)
     end
-    plot!(p2, aspect_ratio = 1, camera = (0, 90))
+    plot!(p2, aspect_ratio = 1, camera = (15, 26))
     # plot!(p2, aspect_ratio = 1)
     # plot!(p2, aspect_ratio = 1, camera = (45, 45))
 
