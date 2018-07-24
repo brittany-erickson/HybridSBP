@@ -197,8 +197,8 @@ let
 
   #{{{ Compute the funtions
   Lx = 15
-  hz = 75
-  ulinear(x,y) = (hz / Lx) * x
+  hz = 20
+  ulinear(x,y) = (hz / Lx) * (x)
   bc_Dirichlet = (lf, x, y, e, δ, t) -> ulinear(x,y)
   bc_Neumann   = (lf, x, y, nx, ny, e, δ, t) -> zeros(size(x))
   in_jump      = (lf, x, y, e, δ, t) -> begin
@@ -213,9 +213,9 @@ let
 
   #{{{ lithostatic normal stress
   ρ = 3000
-  gravity = 10
   σn = 50*ones(δNp)
   #=
+  gravity = 10
   for f = 1:nfaces
     if FToB[f] == BC_JUMP_INTERFACE
       e  = FToE[ 1, f]
@@ -249,26 +249,55 @@ let
     end
 
     # Compute the shear-traction and update velocity
-    mTz1 = 0
+    # mxTz1 = typemin(Float64)
+    # mnTz1 = typemax(Float64)
+    # mxλ = typemin(Float64)
+    # mnλ = typemax(Float64)
     for f = 1:nfaces
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
-        (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
-
-        Tz1 = shear_modulus * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF)
-        # Tz2 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
-        # println(Tz1 ≈ -Tz2)
-
+        # (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
-        V[δrng] = sign.(Tz1) .* max.(0, (abs.(Tz1) - μ * σn[δrng]) / η)
-        mTz1 = max(mTz1, maximum(abs.(Tz1)))
+
+        Tz1 = shear_modulus * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
+                                        FToLF; δ=δ[δrng])
+        #=
+        Tz2 = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO;
+                        δ=δ[δrng])
+        println(Tz1 ≈ -Tz2)
+        =#
+
+        # TODO: figure out why this is minus and not plus (error in sign of
+        # δ somwhere?)
+        V[δrng] = -sign.(Tz1) .* max.(0, (abs.(Tz1) - μ * σn[δrng]) / η)
+
+        # mxTz1 = max(mxTz1, maximum((Tz1)))
+        # mnTz1 = min(mnTz1, minimum((Tz1)))
+        # λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
+        # mxλ = max(mxλ, maximum(abs.(λ[λrng])))
+        # mnλ = min(mnλ, minimum(abs.(λ[λrng])))
       end
     end
-    println((t, maximum(V), mTz1))
+    # println((t, extrema(V), (mnTz1,mxTz1), (mnλ, mxλ), extrema(abs.(δ))))
+    println((t, extrema(V), extrema(abs.(δ))))
+    # V[:].=0
     V
   end
   δ = zeros(δNp)
+
+  #=
+  for f = 1:nfaces
+    if FToB[f] == BC_JUMP_INTERFACE
+      (e1, e2) = FToE[:, f]
+      (lf1, lf2) = FToLF[:, f]
+      (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
+      δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+      δ[δrng] = -sign.(nx[lf1]) * 90
+    end
+  end
+  =#
+
   #=
   sol = solve(SteadyStateProblem(odefun, δ))
   δ[:] = sol.u[:]
@@ -281,8 +310,8 @@ let
 
   V = zeros(δNp)
   odefun(V, δ, (), tspan[end])
-  println(V)
-  println(δ)
+  println("extrema(V) = ", extrema(V))
+  println("extrema(δ) = ", extrema(δ))
 
   @plotting let
     #=
@@ -301,6 +330,7 @@ let
     for e = 1:nelems
       (x, y) = lop[e][4]
       Δu = u[vstarts[e]:(vstarts[e+1]-1)] - ulinear(x,y)
+      # Δu = u[vstarts[e]:(vstarts[e+1]-1)]
       plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
             reshape(y, Nr[e]+1, Ns[e]+1),
             reshape(Δu, Nr[e]+1, Ns[e]+1),
