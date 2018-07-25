@@ -1045,3 +1045,50 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
     return τ[lf2] * (vλ .- δ/2) - vol
   end
 end
+
+
+function rateandstate(V, psi, σn, ϕ, η, a, V0)
+  Y = (1 ./ (2 .* V0)) .* exp.(psi ./ a)
+  f = a .* asinh.(V .* Y)
+  dfdV  = a .* (1 ./ sqrt.(1 + (V .* Y).^2)) .* Y
+
+  g    = σn .* f    + η .* V - ϕ
+  dgdV = σn .* dfdV + η
+  (g, dgdV)
+end
+
+function newtbndv(func, xL, xR, x; ftol = 1e-6, maxiter = 500, minchange=0,
+                  atolx = 1e-4, rtolx = 1e-4)
+  (fL, ~) = func(xL)
+  (fR, ~) = func(xR)
+  if fL .* fR > 0
+    error("does not bracket solution")
+  end
+
+  (f, df) = func(x)
+  dxlr = xR - xL
+
+  for iter = 1:maxiter
+    dx = -f / df
+    x  = x + dx
+
+    if x < xL || x > xR || abs(dx) / dxlr < minchange
+      x = (xR + xL) / 2
+      dx = (xR - xL) / 2
+    end
+
+    (f, df) = func(x)
+
+    if f * fL > 0
+      (fL, xL) = (f, x)
+    else
+      (fR, xR) = (f, x)
+    end
+    dxlr = xR - xL
+
+    if abs(f) < ftol && abs(dx) < atolx + rtolx * (abs(dx) + abs(x))
+      return (x, f, iter)
+    end
+  end
+  return (x, f, -maxiter)
+end

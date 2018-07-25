@@ -1,5 +1,12 @@
 do_plotting = true
-include("global_curved.jl")
+if !isdefined(:mtime_global_curved)
+  mtime_global_curved = 0
+end
+if mtime_global_curved < mtime("global_curved.jl")
+  println("including global_curved")
+  include("global_curved.jl")
+  mtime_global_curved = mtime("global_curved.jl")
+end
 if VERSION <= v"0.6.999999"
   ldiv! = A_ldiv_B!
   cholesky = cholfact
