@@ -13,6 +13,10 @@ if VERSION <= v"0.6.999999"
   # using CholmodSolve2
 end
 using DifferentialEquations
+macro expr_println(ex)
+  return :(println($(string(ex)), " = ", $(esc(ex))))
+end
+
 
 let
 
@@ -103,7 +107,7 @@ let
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
-  println("(nelems, nfaces) = ", (nelems, nfaces))
+  @expr_println (nelems, nfaces)
   #=
   @plotting (p1, p2, p3) = (plot(), plot(), plot())
   @plotting let
@@ -170,7 +174,7 @@ let
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   lop = Dict{Int64, OPTYPE}()
   for e = 1:nelems
-    # println((e, nelems))
+    # @expr_println (e, nelems)
     # Get the element corners
     (x1, x2, x3, x4) = verts[1, EToV[:, e]]
     (y1, y2, y3, y4) = verts[2, EToV[:, e]]
@@ -196,7 +200,7 @@ let
   VNp = vstarts[nelems+1]-1
   λNp = FToλstarts[nfaces+1]-1
   δNp = FToδstarts[nfaces+1]-1
-  println("(VNp, λNp, δNp) = ", (VNp, λNp, δNp))
+  @expr_println (VNp, λNp, δNp)
 
   # Build the (sparse) λ matrix using the schur complement and factor
   B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
@@ -268,25 +272,30 @@ let
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
+        (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
 
         Tz = μshear * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
                                         FToLF; δ=δ[δrng])
         for n = 1:length(δrng)
           δn = δrng[n]
-          VR = abs(Tz[n] / η)
+          τ = Tz[n]
+          VR = abs(τ / η)
           VL = -VR
           (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ[δn], σn[δn],
-                                                          Tz[n], η, RSa,
-                                                          RSV0),
+                                                         τ, η, RSa, RSV0),
                                      VL, VR, 0.0)
+          #=
           if isnan(Vnew) || iter < 0
-            println((VL, VR, V[δn], Tz[n], η, RSa, RSV0))
-            error()
+            @expr_println (VL, VR, V[δn], Vnew, Tz[n], η, RSa, RSV0)
+            #error()
           end
+          =#
+          #=
           if abs(Vnew) > 100
-            println(">>>>>>>>>>>", (Vnew, (VL, VR, V[δn], Tz[n], η, RSa, RSV0)))
+            @expr_println (Vnew, (VL, VR, V[δn], Tz[n], η, RSa, RSV0))
           end
+          =#
           V[δn] = Vnew
 
           dψ(δn) = (RSb * RSV0 / RSDc) * (exp((RSf0-ψ[δn]) / RSb) - abs(V[δn])
@@ -298,15 +307,31 @@ let
         # V[δrng] = -sign.(Tz) .* max.(0, (abs.(Tz) - μ * σn[δrng]) / η)
       end
     end
-    println((t, extrema(V), extrema(abs.(δ))))
+    @expr_println (t, extrema(V), extrema(abs.(δ)))
     V
   end
   ψδ = zeros(2 * δNp)
   ψδ[1:δNp] .= ψ0
 
-  tspan = (8.8e9, 2.0e10)
+  tspan = (0, 1.5e10)
   prob = ODEProblem(odefun, ψδ, tspan)
-  sol = solve(prob,Tsit5(); dtmax=1e5,dt = 1e-8, atol = 1e-10, rtol = 1e-10, save_everystep=false)
+  Vmin = 0.0
+  δmax = -1
+  δcheck(ψδ, p, t) = begin
+    δ = @view ψδ[δNp .+ (1:δNp)]
+    δnewmax = maximum(abs.(δ))
+    if δmax < 0
+      δmax = δnewmax
+    end
+    if δnewmax > 1e-5 && 2*δmax < δnewmax
+      println(">>>>>>>>>>REJECT<<<<<<<<<")
+      return true
+    end
+    δmax = δnewmax
+    println(">>>>>>>>>>PASS<<<<<<<<<")
+    return false
+  end
+  sol = solve(prob,Tsit5(); isoutofdomain=δcheck, dtmax=1e9,dt = 1e3, atol = 1e-10, rtol = 1e-10, save_everystep=false)
   ψδ = sol.u[end]
   ψδ[δNp .+ (1:δNp)] = ψδ[δNp .+ (1:δNp)]
   δ = @view ψδ[δNp .+ (1:δNp)]
@@ -314,8 +339,8 @@ let
   dψV = zeros(2 * δNp)
   odefun(dψV, ψδ, (), tspan[end])
   V = @view dψV[δNp .+ (1:δNp)]
-  println("extrema(V) = ", extrema(V))
-  println("extrema(δ) = ", extrema(δ))
+  @expr_println extrema(V)
+  @expr_println extrema(δ)
 
   @plotting let
     #=

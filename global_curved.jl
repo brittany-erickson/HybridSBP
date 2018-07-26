@@ -1062,7 +1062,7 @@ function newtbndv(func, xL, xR, x; ftol = 1e-6, maxiter = 500, minchange=0,
   (fL, ~) = func(xL)
   (fR, ~) = func(xR)
   if fL .* fR > 0
-    error("does not bracket solution")
+    return (typeof(x)(NaN), typeof(x)(NaN), -maxiter)
   end
 
   (f, df) = func(x)
