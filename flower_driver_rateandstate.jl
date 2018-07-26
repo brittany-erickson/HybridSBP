@@ -247,8 +247,12 @@ let
   μ = 0.6
   #}}}
 
+  reject_step = [false]
   # array of jumps
   odefun(dψV, ψδ, p, t) = begin
+    if reject_step[1]
+      return
+    end
     ψ  = @view ψδ[        (1:δNp) ]
     δ  = @view ψδ[ δNp .+ (1:δNp) ]
     dψ = @view dψV[       (1:δNp) ]
@@ -285,11 +289,14 @@ let
           (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ[δn], σn[δn],
                                                          τ, η, RSa, RSV0),
                                      VL, VR, 0.0)
-          #=
           if isnan(Vnew) || iter < 0
             @expr_println (VL, VR, V[δn], Vnew, Tz[n], η, RSa, RSV0)
+            Vnew = 1e10
+            reject_step[1] = true
+            return
             #error()
           end
+          #=
           =#
           #=
           if abs(Vnew) > 100
@@ -322,6 +329,15 @@ let
     δnewmax = maximum(abs.(δ))
     if δmax < 0
       δmax = δnewmax
+    end
+    if reject_step[1]
+      reject_step[1] = false
+      println(">>>>>>>>>>REJECT (Bool)<<<<<<<<<")
+      return true
+    end
+    if isnan(δnewmax)
+      println(">>>>>>>>>>REJECT (NaN)<<<<<<<<<")
+      return true
     end
     if δnewmax > 1e-5 && 2*δmax < δnewmax
       println(">>>>>>>>>>REJECT<<<<<<<<<")
