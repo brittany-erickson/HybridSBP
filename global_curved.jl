@@ -1034,7 +1034,7 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
     (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
     vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
     vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
-    return τ[lf1] * (vλ .+ δ/2) - vol
+    return τ[lf1] * (vλ .- δ/2) - vol
   else
     (~, F, ~, ~, ~, sJ, ~, ~, ~, HfI, τ) = lop[e2]
     vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
@@ -1042,7 +1042,7 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
     if !EToO[lf2,e2]
       vol = vol[end:-1:1]
     end
-    return τ[lf2] * (vλ .- δ/2) - vol
+    return τ[lf2] * (vλ .+ δ/2) - vol
   end
 end
 
