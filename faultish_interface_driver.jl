@@ -119,7 +119,7 @@ let
   W = 40
   bc_Dirichlet = (lf, x, y, e, t) -> zeros(size(x))
   bc_Neumann   = (lf, x, y, nx, ny, e, t) -> zeros(size(x))
-  in_jump      = (lf, x, y, e, t) -> (EToS[lf, e] == 1 ? t : -t) * (y/W .+ 1)
+  in_jump      = (lf, x, y, e, t) -> (EToS[lf, e] == 1 ? -t : t) * (y/W .+ 1)
   bc_Dirichlet = (lf, x, y, e, t) -> x
   in_jump      = (lf, x, y, e, t) -> zeros(size(x))
 
