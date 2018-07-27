@@ -269,6 +269,10 @@ let
     for e = 1:nelems
       F = locfactors[e]
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
+      #=
+      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
+            (@view u[vstarts[e]:(vstarts[e+1]-1)]))
+            =#
     end
 
     # Compute the shear-traction and update velocity
@@ -320,7 +324,7 @@ let
   ψδ = zeros(2 * δNp)
   ψδ[1:δNp] .= ψ0
 
-  tspan = (0, 1.5e10)
+  tspan = (0, 1e10)
   prob = ODEProblem(odefun, ψδ, tspan)
   Vmin = 0.0
   δmax = -1
