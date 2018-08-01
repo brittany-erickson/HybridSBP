@@ -250,9 +250,12 @@ let
         (lf1, lf2) = FToLF[:, f]
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
 
+        #=
         Tz = μshear * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
-                                        FToLF; δ=δ[δrng])
-        @expr_println (extrema(Tz))
+                                 FToLF; δ=δ[δrng])
+        =#
+        Tz = μshear * computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE,
+                                 FToLF, EToO)
         for n = 1:length(δrng)
           δn = δrng[n]
           τ = Tz[n] + τz0[δn]
