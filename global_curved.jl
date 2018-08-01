@@ -448,6 +448,11 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3 * SJ3))
   F4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr)) + (esNT ⊗ (τ4 * H4 * SJ4))
 
+  G1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T)
+  G2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT)
+  G3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr))
+  G4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr))
+
   # @assert B1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1 * SJ1) ⊗ Er0)
   # @assert B2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2 * SJ2) ⊗ ErN)
   # @assert B3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3 * SJ3))
@@ -478,7 +483,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
   (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), JH,
    (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
-   (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4))
+   (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4), (G1, G2, G3, G4))
 end
 #}}}
 
@@ -1045,6 +1050,71 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
     return τ[lf2] * (vλ .+ δ/2) - vol
   end
 end
+function computeTz2(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
+                   δ=0)
+  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+
+  if isempty(EToO)
+    (~, ~, ~, ~, ~, sJ, nx, ~, ~, HfI, τ, G) = lop[e1]
+    vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+    vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
+    return -vol1
+  else
+    (~, ~, ~, ~, ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+    vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
+    vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
+    if !EToO[lf2,e2]
+      vol2 = vol2[end:-1:1]
+    end
+    return -vol2
+  end
+end
+function computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
+  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+
+  (~, ~, L1, (x1,y1), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e1]
+  vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+  vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
+
+  (~, ~, L2, (x2,y2), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+  vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
+  vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
+  # (xf1, yf1) = (L1[lf1] * x1, L1[lf1] * y1)
+  # (xf2, yf2) = (L2[lf2] * x2, L2[lf2] * y2)
+  if !EToO[lf2,e2]
+    vol2 = vol2[end:-1:1]
+    # xf2 = xf2[end:-1:1]
+    # yf2 = yf2[end:-1:1]
+  end
+  # @assert xf1 ≈ xf2
+  # @assert yf1 ≈ yf2
+
+  #=
+  println()
+  println(EToO[lf2, e2])
+  println(extrema(vol1+vol2))
+  println(extrema(vol2))
+  println(extrema(vol1))
+  println()
+  =#
+  (vol2-vol1)/2
+end
+#=
+function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
+                   δ=0)
+  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+  (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
+  vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+  vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
+  return τ[lf1] * (vλ .- δ/2) - vol
+end
+=#
 
 
 function rateandstate(V, psi, σn, ϕ, η, a, V0)
