@@ -291,8 +291,12 @@ let
         (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
 
+        Tz = μshear * computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE,
+                                 FToLF, EToO)
+        #=
         Tz = μshear * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
-                                        FToLF; δ=δ[δrng])
+                                FToLF; δ=δ[δrng])
+                                 =#
         for n = 1:length(δrng)
           δn = δrng[n]
           τ = Tz[n]
@@ -393,7 +397,7 @@ let
             reshape(Δu, Nr[e]+1, Ns[e]+1),
             st = :surface, c = :balance, clims = clims)
     end
-    plot!(p2, aspect_ratio = 1, camera = (15, 26))
+    plot!(p2, aspect_ratio = 1, camera = (-45, 26))
     # plot!(p2, aspect_ratio = 1)
     # plot!(p2, aspect_ratio = 1, camera = (45, 45))
 
