@@ -218,9 +218,17 @@ let
   in_jump      = (lf, x, y, e, δ, t) -> begin
     f = EToF[lf, e]
     if EToS[lf, e] == 1
-      return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      if EToO[lf, e]
+        return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      else
+        return -δ[(FToδstarts[f+1]-1):-1:FToδstarts[f]]
+      end
     else
-      return δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      if EToO[lf, e]
+        return  δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      else
+        return  δ[(FToδstarts[f+1]-1):-1:FToδstarts[f]]
+      end
     end
   end
   #}}}

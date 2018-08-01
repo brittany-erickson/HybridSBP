@@ -160,14 +160,22 @@ let
   #{{{ Compute the boundary/interface functions
   Vp = 1e-9
   ulinear(x, y, t) = (x/Lx) * (Vp/2) * t
-  bc_Dirichlet = (lf, x, y, e, δ, t) -> sign.(x) * (Vp/2) * t
+  bc_Dirichlet = (lf, x, y, e, δ, t) -> ulinear(x,y,t)
   bc_Neumann   = (lf, x, y, nx, ny, e, δ, t) -> zeros(size(x))
   in_jump      = (lf, x, y, e, δ, t) -> begin
     f = EToF[lf, e]
     if EToS[lf, e] == 1
-      return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      if EToO[lf, e]
+        return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      else
+        return -δ[(FToδstarts[f+1]-1):-1:FToδstarts[f]]
+      end
     else
-      return δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      if EToO[lf, e]
+        return  δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+      else
+        return  δ[(FToδstarts[f+1]-1):-1:FToδstarts[f]]
+      end
     end
   end
   #}}}
