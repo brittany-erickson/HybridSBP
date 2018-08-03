@@ -13,7 +13,8 @@ if !@isdefined ⊗
 end
 
 #{{{ locoperator
-function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
+function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [],
+                     fully_compatible=false)
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp
@@ -161,6 +162,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   # @assert Ss0 ≈ (S0 ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
   # @assert SsN ≈ (SN ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
 
+
   Asr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
   Ars = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
 
@@ -171,10 +173,27 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   Es0 = sparse([1], [1], [1], Nsp, Nsp)
   EsN = sparse([Nsp], [Nsp], [1], Nsp, Nsp)
 
-  crs0 = sparse(Diagonal(crs[1:Nrp]))
-  crsN = sparse(Diagonal(crs[Nrp*Ns .+ (1:Nrp)]))
-  csr0 = sparse(Diagonal(csr[1   .+ Nrp*(0:Ns)]))
-  csrN = sparse(Diagonal(csr[Nrp .+ Nrp*(0:Ns)]))
+  if fully_compatible
+    # Force fully compatible
+    Sr0 = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Er0 * Dr))
+    SrN = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (ErN * Dr))
+    Ss0 = ((Es0 * Ds) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
+    SsN = ((EsN * Ds) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+
+    Sr0T = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * Er0))
+    SrNT = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * ErN))
+    Ss0T = ((Ds' * Es0) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
+    SsNT = ((Ds' * EsN) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+  end
+
+  crs0 = crsi0 = sparse(Diagonal(crs[1:Nrp]))
+  crsN = crsiN = sparse(Diagonal(crs[Nrp*Ns .+ (1:Nrp)]))
+  csr0 = csr0j = sparse(Diagonal(csr[1   .+ Nrp*(0:Ns)]))
+  csrN = csrNj = sparse(Diagonal(csr[Nrp .+ Nrp*(0:Ns)]))
+  cssi0 = sparse(Diagonal(css[1:Nrp]))
+  cssiN = sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))
+  crr0j = sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)]))
+  crrNj = sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)]))
 
   er0T = sparse([1], [1  ], [1], 1, Nrp)
   erNT = sparse([1], [Nrp], [1], 1, Nrp)
@@ -240,7 +259,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   MIP = A + B1 + B2 + B3 + B4
 
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
-  (MIP, A, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4))
+  (MIP, A, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
+   ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN)))
 end
 #}}}
 
@@ -281,11 +301,15 @@ let
 
   xt = (r,s)->transfinite_blend(-1.0,  2.0, -3.0, 1.0, r, s)
   yt = (r,s)->transfinite_blend(-5.0, -1.0,  1.0, 3.0, r, s)
+  # xt = (r,s)->transfinite_blend(-1.0,  1.0, -1.0, 1.0, r, s)
+  # yt = (r,s)->transfinite_blend(-1.0, -1.0,  1.0, 1.0, r, s)
 
   (MIP, A, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
-   ) = locoperator(p, Nr, Ns, xt, yt)
+   ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN))) =
+    locoperator(p, Nr, Ns, xt, yt; fully_compatible=true)
   # (E, V) = eigen(Matrix(MIP))
   # println(extrema(E))
+  display(plot(x,y,marker=10))
 
   τsJH1 = H1 * 100 * (Ns+1)
   τsJH2 = H2 * 100 * (Ns+1)
@@ -300,7 +324,35 @@ let
       L1' * S1 + L2' * S2 + L3' * S3 + L4' * S4
   @assert MIP ≈ M
 
-  display(plot(x,y,marker=10))
+
+  (E, V) = eigen(Matrix(M))
+  println(extrema(E))
+
+
+  # Trying to set up LDG, not working yet...
+  if p == 2
+    h11 = 1/2
+    β = 0.3636363636
+  elseif p == 4
+    h11 = 17 / 48
+    β = 0.2505765857
+  end
+
+  hr = 2 / Nr
+  hs = 2 / Ns
+
+  τsJH1 = H1 / (hs * h11)
+  τsJH2 = H2 / (hs * h11)
+  τsJH3 = H3 / (hr * h11)
+  τsJH4 = H4 / (hr * h11)
+
+  S1 = G1 + H1 * (crr0j + csr0j) * L1 + L1 * L3' * H3 * (cssi0 + crsi0) * L3 - L1 * L4' * H4 * (cssiN + crsiN) * L4 + τsJH1 * L1
+  S2 = G2 + H2 * (crrNj + csrNj) * L2 - L2 * L3' * H3 * (cssi0 + crsi0) * L3 + L2 * L4' * H4 * (cssiN + crsiN) * L4 + τsJH2 * L2
+  S3 = G3 + H3 * (cssi0 + crsi0) * L3 + L3 * L1' * H1 * (crr0j + csr0j) * L1 - L3 * L2' * H2 * (crrNj + csrNj) * L2 + τsJH3 * L3
+  S4 = G4 + H4 * (cssiN + crsiN) * L4 - L4 * L1' * H1 * (crr0j + csr0j) * L1 + L4 * L2' * H2 * (crrNj + csrNj) * L2 + τsJH4 * L4
+  M = A +
+      G1' * L1 + G2' * L2 + G3' * L3 + G4' * L4 +
+      L1' * S1 + L2' * S2 + L3' * S3 + L4' * S4
 
   (E, V) = eigen(Matrix(M))
   println(extrema(E))
