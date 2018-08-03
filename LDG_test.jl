@@ -259,7 +259,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [],
   MIP = A + B1 + B2 + B3 + B4
 
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
-  (MIP, A, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
+  (MIP, A, JH, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
+   (SJ1, SJ2, SJ3, SJ4),
    ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN)))
 end
 #}}}
@@ -296,65 +297,119 @@ end
 
 let
   p = 4
-  Nr = 13
-  Ns = 14
+  fully_compatible=false
 
-  xt = (r,s)->transfinite_blend(-1.0,  2.0, -3.0, 1.0, r, s)
-  yt = (r,s)->transfinite_blend(-5.0, -1.0,  1.0, 3.0, r, s)
+  xt = (r,s)->transfinite_blend(-0.75,  0, -1.1, 1.0, r, s)
+  yt = (r,s)->transfinite_blend(-0.5, -1.0,  1.0, 0.25, r, s)
   # xt = (r,s)->transfinite_blend(-1.0,  1.0, -1.0, 1.0, r, s)
   # yt = (r,s)->transfinite_blend(-1.0, -1.0,  1.0, 1.0, r, s)
 
-  (MIP, A, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
-   ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN))) =
-    locoperator(p, Nr, Ns, xt, yt; fully_compatible=true)
-  # (E, V) = eigen(Matrix(MIP))
-  # println(extrema(E))
-  display(plot(x,y,marker=10))
+  for lvl = 1:5
+    Nr = 13 * 2^(lvl-1)
+    Ns = 14 * 2^(lvl-1)
 
-  τsJH1 = H1 * 100 * (Ns+1)
-  τsJH2 = H2 * 100 * (Ns+1)
-  τsJH3 = H3 * 100 * (Nr+1)
-  τsJH4 = H4 * 100 * (Nr+1)
-  S1 = G1 + τsJH1 * L1
-  S2 = G2 + τsJH2 * L2
-  S3 = G3 + τsJH3 * L3
-  S4 = G4 + τsJH4 * L4
-  M = A +
-      G1' * L1 + G2' * L2 + G3' * L3 + G4' * L4 +
-      L1' * S1 + L2' * S2 + L3' * S3 + L4' * S4
-  @assert MIP ≈ M
+    (MIP, A, JH, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
+     (SJ1, SJ2, SJ3, SJ4),
+     ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN))) =
+    locoperator(p, Nr, Ns, xt, yt; fully_compatible=fully_compatible)
 
+    # display(plot(x,y,marker=10))
 
-  (E, V) = eigen(Matrix(M))
-  println(extrema(E))
+    τsJH1 = H1 * 100 * (Ns+1)
+    τsJH2 = H2 * 100 * (Ns+1)
+    τsJH3 = H3 * 100 * (Nr+1)
+    τsJH4 = H4 * 100 * (Nr+1)
+    #=
+    S1 = G1 + τsJH1 * L1
+    S2 = G2 + τsJH2 * L2
+    S3 = G3 + τsJH3 * L3
+    S4 = G4 + τsJH4 * L4
+    M = A +
+    G1' * L1 + G2' * L2 + G3' * L3 + G4' * L4 +
+    L1' * S1 + L2' * S2 + L3' * S3 + L4' * S4
+    @assert MIP ≈ M
+    (E, V) = eigen(Matrix(M))
+    println(extrema(E))
+    =#
 
+    (kx, ky) = (π, π)
+    vex   = (x,y) ->       cos.(kx * x) .* cosh.(ky * y)
 
-  # Trying to set up LDG, not working yet...
-  if p == 2
-    h11 = 1/2
-    β = 0.3636363636
-  elseif p == 4
-    h11 = 17 / 48
-    β = 0.2505765857
+    λ1 = vex(L1 * x, L1 * y)
+    λ2 = vex(L2 * x, L2 * y)
+    λ3 = vex(L3 * x, L3 * y)
+    λ4 = vex(L4 * x, L4 * y)
+
+    bIP = (G1' * λ1 + G2' * λ2 + G3' * λ3 + G4' * λ4
+           + L1' * τsJH1 * λ1 + L2' * τsJH2 * λ2
+           + L3' * τsJH3 * λ3 + L4' * τsJH4 * λ4)
+    uIP = reshape(MIP \ bIP, Nr+1, Ns+1)
+
+    # Trying to set up LDG
+    if p == 2
+      h11 = 1/2
+      β = 0.3636363636
+    elseif p == 4
+      h11 = 17 / 48
+      β = 0.2505765857
+    end
+    if fully_compatible
+      β = h11
+    end
+
+    (hr, hs) = (2 / Nr, 2 / Ns)
+
+    τsJH1 = 0 * (Ns+1) * H1 # * SJ1
+    τsJH2 = 0 * (Ns+1) * H2 # * SJ2
+    τsJH3 = 0 * (Nr+1) * H3 # * SJ3
+    τsJH4 = 0 * (Nr+1) * H4 # * SJ4
+
+    Sλ1(λ1, λ2, λ3, λ4) = (H1/(hr*β)) * crr0j * λ1 + L1 * L3' * crsi0 * λ3 - L1 * L4' * crsiN * λ4 + τsJH1 * λ1
+    Sλ2(λ1, λ2, λ3, λ4) = (H2/(hr*β)) * crrNj * λ2 - L2 * L3' * crsi0 * λ3 + L2 * L4' * crsiN * λ4 + τsJH2 * λ2
+    Sλ3(λ1, λ2, λ3, λ4) = (H3/(hs*β)) * cssi0 * λ3 + L3 * L1' * csr0j * λ1 - L3 * L2' * csrNj * λ2 + τsJH3 * λ3
+    Sλ4(λ1, λ2, λ3, λ4) = (H4/(hs*β)) * cssiN * λ4 - L4 * L1' * csr0j * λ1 + L4 * L2' * csrNj * λ2 + τsJH4 * λ4
+
+    S1 = G1 + Sλ1(L1, L2, L3, L4)
+    S2 = G2 + Sλ2(L1, L2, L3, L4)
+    S3 = G3 + Sλ3(L1, L2, L3, L4)
+    S4 = G4 + Sλ4(L1, L2, L3, L4)
+
+    MLDG = A + (G1' * L1 + L1' * S1 + G2' * L2 + L2' * S2 +
+                G3' * L3 + L3' * S3 + G4' * L4 + L4' * S4)
+
+    bLDG = (L1' * Sλ1(λ1, λ2, λ3, λ4) + L2' * Sλ2(λ1, λ2, λ3, λ4) +
+            L3' * Sλ3(λ1, λ2, λ3, λ4) + L4' * Sλ4(λ1, λ2, λ3, λ4) +
+            G1' * λ1 + G2' * λ2 + G3' * λ3 + G4' * λ4)
+
+    if lvl < 3
+      (E, V) = eigen(Matrix(MIP))
+      println(extrema(E))
+      (E, V) = eigen(Matrix(MLDG))
+      println(extrema(E))
+    end
+
+    uLDG = reshape(MLDG \ bLDG, Nr+1, Ns+1)
+
+    (X, Y) = (reshape(x, Nr+1, Ns+1), reshape(y, Nr+1, Ns+1))
+    uex = vex(X, Y)
+
+    ΔIP = uIP - uex
+    ΔLDG = uLDG - uex
+    @views ϵIP = √(ΔIP[:]' * JH * ΔIP[:])
+    @views ϵLDG = √(ΔLDG[:]' * JH * ΔLDG[:])
+    println((lvl, ϵIP, ϵLDG))
+
+    p1 = contour(X, Y, uex, aspect_ratio = 1)
+
+    p2 = contour(X, Y, uIP, aspect_ratio = 1)
+    p3 = contour(X, Y, uLDG, aspect_ratio = 1)
+
+    xe = xt([-1 1 1 -1 -1], [-1 -1 1 1 -1])'
+    ye = yt([-1 1 1 -1 -1], [-1 -1 1 1 -1])'
+    plot!(p1, xe, ye, color=:black)
+    plot!(p2, xe, ye, color=:black)
+    plot!(p3, xe, ye, color=:black)
+    display(plot(p1, p2, p3, layout = (1,3), size = (2000, 800)))
   end
-
-  hr = 2 / Nr
-  hs = 2 / Ns
-
-  τsJH1 = H1 / (hs * h11)
-  τsJH2 = H2 / (hs * h11)
-  τsJH3 = H3 / (hr * h11)
-  τsJH4 = H4 / (hr * h11)
-
-  S1 = G1 + H1 * (crr0j + csr0j) * L1 + L1 * L3' * H3 * (cssi0 + crsi0) * L3 - L1 * L4' * H4 * (cssiN + crsiN) * L4 + τsJH1 * L1
-  S2 = G2 + H2 * (crrNj + csrNj) * L2 - L2 * L3' * H3 * (cssi0 + crsi0) * L3 + L2 * L4' * H4 * (cssiN + crsiN) * L4 + τsJH2 * L2
-  S3 = G3 + H3 * (cssi0 + crsi0) * L3 + L3 * L1' * H1 * (crr0j + csr0j) * L1 - L3 * L2' * H2 * (crrNj + csrNj) * L2 + τsJH3 * L3
-  S4 = G4 + H4 * (cssiN + crsiN) * L4 - L4 * L1' * H1 * (crr0j + csr0j) * L1 + L4 * L2' * H2 * (crrNj + csrNj) * L2 + τsJH4 * L4
-  M = A +
-      G1' * L1 + G2' * L2 + G3' * L3 + G4' * L4 +
-      L1' * S1 + L2' * S2 + L3' * S3 + L4' * S4
-
-  (E, V) = eigen(Matrix(M))
-  println(extrema(E))
 
 end
