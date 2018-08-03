@@ -364,10 +364,29 @@ let
     τsJH3 = 0 * (Nr+1) * H3 # * SJ3
     τsJH4 = 0 * (Nr+1) * H4 # * SJ4
 
-    Sλ1(λ1, λ2, λ3, λ4) = (H1/(hr*β)) * crr0j * λ1 + L1 * L3' * crsi0 * λ3 - L1 * L4' * crsiN * λ4 + τsJH1 * λ1
-    Sλ2(λ1, λ2, λ3, λ4) = (H2/(hr*β)) * crrNj * λ2 - L2 * L3' * crsi0 * λ3 + L2 * L4' * crsiN * λ4 + τsJH2 * λ2
-    Sλ3(λ1, λ2, λ3, λ4) = (H3/(hs*β)) * cssi0 * λ3 + L3 * L1' * csr0j * λ1 - L3 * L2' * csrNj * λ2 + τsJH3 * λ3
-    Sλ4(λ1, λ2, λ3, λ4) = (H4/(hs*β)) * cssiN * λ4 - L4 * L1' * csr0j * λ1 + L4 * L2' * csrNj * λ2 + τsJH4 * λ4
+    T11 = L1 * L1' * ((H1/(hr*β)) * crr0j + τsJH1)
+    T22 = L2 * L2' * ((H2/(hr*β)) * crrNj + τsJH2)
+    T33 = L3 * L3' * ((H3/(hs*β)) * cssi0 + τsJH3)
+    T44 = L4 * L4' * ((H4/(hs*β)) * cssiN + τsJH4)
+
+    T13 = + L1 * L3' * crsi0
+    T14 = - L1 * L4' * crsiN
+    T23 = - L2 * L3' * crsi0
+    T24 = + L2 * L4' * crsiN
+    T31 = + L3 * L1' * csr0j
+    T32 = - L3 * L2' * csrNj
+    T41 = - L4 * L1' * csr0j
+    T42 = + L4 * L2' * csrNj
+
+    @assert L1' * T13 * L3 ≈ L3' * T31 * L1
+    @assert L1' * T14 * L4 ≈ L4' * T41 * L1
+    @assert L2' * T23 * L3 ≈ L3' * T32 * L2
+    @assert L2' * T24 * L4 ≈ L4' * T42 * L2
+
+    Sλ1(λ1, λ2, λ3, λ4) = T11 * λ1 + T13 * λ3 + T14 * λ4
+    Sλ2(λ1, λ2, λ3, λ4) = T22 * λ2 + T23 * λ3 + T24 * λ4
+    Sλ3(λ1, λ2, λ3, λ4) = T33 * λ3 + T31 * λ1 + T32 * λ2
+    Sλ4(λ1, λ2, λ3, λ4) = T44 * λ4 + T41 * λ1 + T42 * λ2
 
     S1 = G1 + Sλ1(L1, L2, L3, L4)
     S2 = G2 + Sλ2(L1, L2, L3, L4)
