@@ -381,6 +381,19 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   Es0 = sparse([1], [1], [1], Nsp, Nsp)
   EsN = sparse([Nsp], [Nsp], [1], Nsp, Nsp)
 
+  if false
+    # Force fully compatible
+    Sr0 = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Er0 * Dr))
+    SrN = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (ErN * Dr))
+    Ss0 = ((Es0 * Ds) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
+    SsN = ((EsN * Ds) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+
+    Sr0T = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * Er0))
+    SrNT = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * ErN))
+    Ss0T = ((Ds' * Es0) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
+    SsNT = ((Ds' * EsN) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+  end
+
   crs0 = sparse(Diagonal(crs[1:Nrp]))
   crsN = sparse(Diagonal(crs[Nrp*Ns .+ (1:Nrp)]))
   csr0 = sparse(Diagonal(csr[1   .+ Nrp*(0:Ns)]))
@@ -472,7 +485,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
         M -= F[lf]' * (Diagonal(1 ./ (sJ[lf] .* diag(τ[lf]))) * HfI[lf]) * F[lf]
       elseif !(LFToB[lf] == BC_DIRICHLET ||
                LFToB[lf] == BC_LOCKED_INTERFACE ||
-               LFToB[lf] == BC_JUMP_INTERFACE)
+               LFToB[lf] >= BC_JUMP_INTERFACE)
         error("invalid bc")
       end
     end
@@ -504,7 +517,7 @@ end
         plot!(p, L[lf] * x, L[lf] * y, color=:blue, legend=:none, linewidth=3)
       elseif FToB[f] == BC_LOCKED_INTERFACE
         plot!(p, L[lf] * x, L[lf] * y, color=:green, legend=:none, linewidth=3)
-      elseif FToB[f] == BC_JUMP_INTERFACE
+      elseif FToB[f] >= BC_JUMP_INTERFACE
         plot!(p, L[lf] * x, L[lf] * y, color=:purple, legend=:none, linewidth=3)
       else
         error("invalid bc")
@@ -630,7 +643,7 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
       vf = bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...) ./ diag(τ[lf])
     elseif LFToB[lf] == BC_LOCKED_INTERFACE
       continue # nothing to do here
-    elseif LFToB[lf] == BC_JUMP_INTERFACE
+    elseif LFToB[lf] >= BC_JUMP_INTERFACE
       # In this case we need to add in half the jump
       vf = in_jump(lf, xf, yf, bcargs...) / 2
     else
@@ -803,7 +816,7 @@ function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
   bcstarts = Array{Int64, 1}(undef, nfaces + 1)
   bcstarts[1] = 1
   for f = 1:nfaces
-    if FToB[f] == bc_type
+    if FToB[f] ∈ bc_type
       e  = FToE[1,f]
       lf = FToLF[1,f]
       bcstarts[f+1] = bcstarts[f] + (lf ∈ (1,2) ? Ns[e] : Nr[e]) + 1
@@ -845,12 +858,12 @@ function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
     vrng = vstarts[e]:(vstarts[e+1]-1)
     for lf = 1:4
       f = EToF[lf,e]
-      if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] == BC_JUMP_INTERFACE
+      if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] >= BC_JUMP_INTERFACE
         λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
         B = Matrix(F[e] \ Ttranspose[vrng, λrng])
         for lf2 = 1:4
           f2 = EToF[lf2,e]
-          if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] == BC_JUMP_INTERFACE
+          if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] >= BC_JUMP_INTERFACE
             λrng2 = FToλstarts[f2]:(FToλstarts[f2+1]-1)
             C = T[λrng2, vrng] * B
             λblck = λrng*ones(Int64, 1, length(λrng2))
@@ -998,7 +1011,7 @@ function read_inp_2d(T, S, filename::String)
         end
         FToB[EToF[face, elm]] = bc
         @assert (bc == BC_DIRICHLET || bc == BC_NEUMANN ||
-                 bc == BC_LOCKED_INTERFACE || bc == BC_JUMP_INTERFACE)
+                 bc == BC_LOCKED_INTERFACE || bc >= BC_JUMP_INTERFACE)
       end
     end
     linenum = SeekToSubstring(lines, "\\*ELSET"; first=linenum+1)
@@ -1020,9 +1033,15 @@ end
 
 # }}}
 
-function LocalToGLobalRHS!(b, g, u, F, T, vstarts)
+function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
   for e = 1:length(F)
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+    if !lockedblock[e]
+      # @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
+            (@view g[vstarts[e]:(vstarts[e+1]-1)]))
+    else
+      @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
+    end
   end
   mul!(b, T, u)
   b
@@ -1102,6 +1121,24 @@ function computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
   println()
   =#
   (vol2-vol1)/2
+end
+function computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
+  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+
+  (~, ~, L1, (x1,y1), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e1]
+  vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+  vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
+
+  (~, ~, L2, (x2,y2), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+  vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
+  vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
+  if !EToO[lf2,e2]
+    vol2 = vol2[end:-1:1]
+  end
+
+  (vol2, -vol1)
 end
 #=
 function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
