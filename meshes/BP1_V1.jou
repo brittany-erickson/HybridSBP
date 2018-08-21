@@ -6,11 +6,11 @@ ${Units('si')}
 #---------------
 reset
 
-${Lx=100}
+${Lx=80}
 ${H=15}
 ${h=12}
 ${W=40}
-${Ly=100}
+${Ly=80}
 
 ${d0=0}
 ${d4=0}
@@ -80,7 +80,7 @@ refine curve 18 19 20 numsplit 2 bias 1.0 depth 1 smooth
 
 Sideset 1 add curve 2 4               # Displacement (half V_p)
 Sideset 2 add curve 26 27 12 13 21 24 # Free
-Sideset 3 add curve 25                # Displacement jump with V_p
+Sideset 8 add curve 25                # Displacement jump with V_p
 Sideset 7 add curve 18 19 20          # Frictional fault
 
 export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/BP1_V1.inp"  overwrite

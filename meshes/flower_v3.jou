@@ -1,0 +1,76 @@
+# RUN WITH CUBIT 15.2
+
+# Set units to SI.
+${Units('si')}
+
+#---------------
+reset
+
+${Lx2=80}
+${Ly2=80}
+${Lx1=20}
+${Ly1=40}
+
+create surface rectangle width {2*Lx2} height {Ly2} zplane 
+move Surface 1  location 0 {-Ly2/2} 0 include_merged
+
+create vertex  0       0    0
+create vertex  0.2    -1.5  0
+create vertex  0.3    -4    0
+create vertex  0      -8    0
+create vertex  -5   {-Ly2}  0
+
+create curve spline vertex 5 6 7 8 9
+
+create vertex  -5 0  0
+create vertex  -3 -5  0
+create curve spline vertex 10 11 8 delete
+
+create vertex  -2 0  0
+create vertex  -1.5 -2  0
+create curve spline vertex 12 13 7 delete
+
+create vertex   1 0  0
+create curve vertex 6 14 delete
+
+create vertex   4  0  0
+create vertex   4 -2  0
+create curve spline vertex 15 16 8 delete
+
+imprint tolerant surface 1 with curve 5 6 7 8 9 merge
+delete curve 5 6 7 8 9
+
+create vertex  {-Lx1}      0   0
+create vertex  {-Lx1}  {-Ly1}  0
+create vertex  { Lx1}  {-Ly1}  0
+create vertex  { Lx1}      0   0
+create curve vertex 27 28
+create curve vertex 28 29
+create curve vertex 29 30
+imprint tolerant surface 5 with curve 26 27 merge
+imprint tolerant surface 3 with curve 27 28 merge
+delete curve 26 27 28
+
+
+surface 7  size 3
+mesh surface 7
+surface 6  size 3
+mesh surface 6
+surface 4  size 3
+mesh surface 4
+surface 2  size 3
+mesh surface 2
+surface 1  size 3
+mesh surface 1
+surface 8 10  size 20
+mesh surface 8 10
+refine curve 29 30 35 36 numsplit 2 bias 1.0 depth 1 smooth
+surface 9 11  size 3
+mesh surface 9 11
+
+Sideset 1 add curve 2 4                           # Displacement (half V_p)
+Sideset 2 add curve 22 16 37 38 25 11 24 19 34 31 # Free
+Sideset 7 add curve 23 10 18 14 20 13 33          # Frictional fault
+Sideset 8 add curve 32                            # Displacement jump with V_p
+
+export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/flower_v3.inp"  overwrite
