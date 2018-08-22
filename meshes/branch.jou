@@ -28,10 +28,23 @@ delete curve 5 6
 surface 2 3 4 size 0.25
 mesh surface 2 3 4
 
-# Sideset 1 add curve 2 4
-# Sideset 2 add curve 9 10 12 13 14
+# Sideset 1 add curve 2 4           # Dirichlet :: 1
+# Sideset 2 add curve 9 10 12 13 14 # Neumann :: 2
 
-Sideset 1 add curve 2 4 9 10 12 13 14
-Sideset 7 add curve 11 # top main
-Sideset 8 add curve 8  # bottom main
-Sideset 9 add curve 7  # branch
+# Sideset 7 add curve 11 # top main :: 7
+# Sideset 8 add curve 8  # bottom main :: 8
+# Sideset 9 add curve 7  # branch :: 9
+
+Sideset 1 add curve 2 4           # Dirichlet :: 1
+Sideset 1 add curve 9 10 12 13 14 # Neumann :: 2
+
+Sideset 1 add curve 11 # top main :: 7
+Sideset 1 add curve 8  # bottom main :: 8
+Sideset 1 add curve 7  # branch :: 9
+
+
+block 1 add surface 3 # left side
+block 2 add surface 4 # wedge
+block 3 add surface 2 # right side
+
+export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/branch.inp"  overwrite

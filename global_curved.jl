@@ -4,16 +4,13 @@ if VERSION <= v"0.6.999999"
     return isdefined(s)
   end
   (!isdefined(:do_plotting)) && (do_plotting = true)
-  if do_plotting
-    macro plotting(ex)
-      return :($(esc(ex)))
-    end
-  else
-    macro plotting(ex)
-    end
-  end
   mul! = A_mul_B!
   cholesky = cholfact
+end
+if do_plotting
+  macro plotting(ex)
+    return :($(esc(ex)))
+  end
 else
   macro plotting(ex)
   end
@@ -21,13 +18,13 @@ end
 
 @plotting let
   using Plots
-  pyplot()
+  # pyplot()
 end
 
 include("diagonal_sbp.jl")
 
 using Compat
-import Compat: range, undef
+import Compat: range, undef, split
 using Compat.SparseArrays
 
 # flatten tuples to arrays
@@ -445,10 +442,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   H4 = Hr
   H4I = HrI
 
-  τ1 = sparse(1:Nsp, 1:Nsp, 100*Nsp./sJ1)
-  τ2 = sparse(1:Nsp, 1:Nsp, 100*Nsp./sJ2)
-  τ3 = sparse(1:Nrp, 1:Nrp, 100*Nrp./sJ3)
-  τ4 = sparse(1:Nrp, 1:Nrp, 100*Nrp./sJ4)
+  τ1 = sparse(1:Nsp, 1:Nsp, 1000000*Nsp./sJ1)
+  τ2 = sparse(1:Nsp, 1:Nsp, 1000000*Nsp./sJ2)
+  τ3 = sparse(1:Nrp, 1:Nrp, 1000000*Nrp./sJ3)
+  τ4 = sparse(1:Nrp, 1:Nrp, 1000000*Nrp./sJ4)
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
   B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
@@ -905,13 +902,13 @@ function read_inp_2d(T, S, filename::String)
   linenum > 0 || error("did not find: $str")
   num_nodes = 0
   for l = linenum+1:length(lines)
-    ismatch(r"^\s*[0-9]*\s*,.*", lines[l]) ? num_nodes+=1 : break
+    occursin(r"^\s*[0-9]*\s*,.*", lines[l]) ? num_nodes+=1 : break
   end
   Vx = fill(S(NaN), num_nodes)
   Vy = fill(S(NaN), num_nodes)
   Vz = fill(S(NaN), num_nodes)
-  for l = linenum+(1:num_nodes)
-    node_data = split(lines[l], r"\s|,", keep=false)
+  for l = linenum .+ (1:num_nodes)
+    node_data = split(lines[l], r"\s|,", keepempty=false)
     (node_num, node_x, node_y, node_z) = try
       (parse(T, node_data[1]),
        parse(S, node_data[2]),
@@ -930,25 +927,37 @@ function read_inp_2d(T, S, filename::String)
   # {{{ Read in Elements
   str = "ELEMENT"
   linenum = SeekToSubstring(lines, str);
-  linenum > 0 || error("did not find: $str")
   num_elm = 0
-  for l = linenum+1:length(lines)
-    ismatch(r"^\s*[0-9]*\s*,.*", lines[l]) ? num_elm+=1 : break
-  end
-  EToV = fill(T(0), 4, num_elm)
-  for l = linenum+(1:num_elm)
-    elm_data = split(lines[l], r"\s|,", keep=false)
-    # read into z-order
-    (elm_num, elm_v1, elm_v2, elm_v4, elm_v3) = try
-      (parse(T, elm_data[1]),
-       parse(T, elm_data[2]),
-       parse(T, elm_data[3]),
-       parse(T, elm_data[4]),
-       parse(T, elm_data[5]))
-    catch
-      error("cannot parse line $l: \"$(lines[l])\" ")
+  while linenum > 0
+    for l = linenum .+ (1:length(lines))
+      occursin(r"^\s*[0-9]*\s*,.*", lines[l]) ? num_elm+=1 : break
     end
-    EToV[:, elm_num] = [elm_v1, elm_v2, elm_v3, elm_v4]
+    linenum = SeekToSubstring(lines, str; first=linenum+1)
+  end
+  num_elm > 0 || error("did not find any element")
+
+  EToV = fill(T(0), 4, num_elm)
+  EToBlock = fill(T(0), num_elm)
+  linenum = SeekToSubstring(lines, str);
+  while linenum > 0
+    foo = split(lines[linenum], r"[^0-9]", keepempty=false)
+    B = parse(T, foo[end])
+    for l = linenum .+ (1:num_elm)
+      elm_data = split(lines[l], r"\s|,", keepempty=false)
+      # read into z-order
+      (elm_num, elm_v1, elm_v2, elm_v4, elm_v3) = try
+        (parse(T, elm_data[1]),
+         parse(T, elm_data[2]),
+        parse(T, elm_data[3]),
+        parse(T, elm_data[4]),
+        parse(T, elm_data[5]))
+      catch
+        break
+      end
+      EToV[:, elm_num] = [elm_v1, elm_v2, elm_v3, elm_v4]
+      EToBlock[elm_num] = B
+    end
+    linenum = SeekToSubstring(lines, str; first=linenum+1)
   end
   # }}}
 
@@ -987,7 +996,7 @@ function read_inp_2d(T, S, filename::String)
   linenum = SeekToSubstring(lines, "\\*ELSET")
   inp_to_zorder = [3,  2, 4, 1]
   while linenum > 0
-    foo = split(lines[linenum], r"[^0-9]", keep=false)
+    foo = split(lines[linenum], r"[^0-9]", keepempty=false)
     (bc, face) = try
       (parse(T, foo[1]),
        parse(T, foo[2]))
@@ -996,10 +1005,10 @@ function read_inp_2d(T, S, filename::String)
     end
     face = inp_to_zorder[face]
     for l = linenum+1:length(lines)
-      if !ismatch(r"^\s*[0-9]+", lines[l])
+      if !occursin(r"^\s*[0-9]+", lines[l])
         break
       end
-      elms = split(lines[l], r"\s|,", keep=false)
+      elms = split(lines[l], r"\s|,", keepempty=false)
       for elm in elms
         elm = try
           parse(T, elm)
@@ -1018,13 +1027,13 @@ function read_inp_2d(T, S, filename::String)
   end
   # }}}
 
-  ([Vx Vy]', EToV, EToF, FToB)
+  ([Vx Vy]', EToV, EToF, FToB, EToBlock)
 end
 read_inp_2d(filename) = read_inp_2d(Int64, Float64, filename)
 
 function SeekToSubstring(lines, substring; first=1)
   for l = first:length(lines)
-    if ismatch(Regex(".*$(substring).*"), lines[l])
+    if occursin(Regex(".*$(substring).*"), lines[l])
       return l
     end
   end
@@ -1033,12 +1042,26 @@ end
 
 # }}}
 
+function LocalToGLobalRHS!(b, g, u, F, T, vstarts)
+  for e = 1:length(F)
+    @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+    #=
+    ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
+    (@view g[vstarts[e]:(vstarts[e+1]-1)]))
+    =#
+  end
+  mul!(b, T, u)
+  b
+end
+
 function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
   for e = 1:length(F)
     if !lockedblock[e]
-      # @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
             (@view g[vstarts[e]:(vstarts[e+1]-1)]))
+      =#
     else
       @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
     end
