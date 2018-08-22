@@ -61,19 +61,22 @@ let
 
   # Exact solution
   u1ex(x,y) = cos.(x) .* cos.(π * y / Ly) .- (H .* x - (x.^2)/2)
+  u1ex_x(x,y) = -sin.(x) .* cos.(π * y / Ly) .- (H .- x)
+  u1ex_y(x,y) = -(π / Ly) * cos.(x) .* sin.(π * y / Ly)
   u1ex_xx(x,y) = -cos.(x) .* cos.(π * y / Ly) .+ 1
   u1ex_yy(x,y) = -(π/Ly)^2 .* cos.(x) .* cos.(π * y / Ly)
-  f1ex(x,y) = (u1ex_xx(x,y) + u1ex_yy(x,y))
 
   u2ex(x,y) = 1 .+ sin.(x.^2 .+ (y .+ H).^2) .+ (y.^2)/2 .- (H * x .+ (x.^2)/2)
+  u2ex_x(x,y) = -H .- x .+ 2 .* x .* cos.(x.^2 .+ (H .+ y).^2)
+  u2ex_y(x,y) = y .+ 2 .* (H .+ y) .* cos.(x.^2 .+ (H .+ y).^2)
   u2ex_xx(x,y) = 2 * (cos.(x.^2 .+ (y .+ H).^2) .- 2 * x.^2 .* sin.(x.^2 + (y .+ H).^2)) .- 1
   u2ex_yy(x,y) = 2 * (cos.(x.^2 .+ (H .+ y).^2) .- 2 .* (H .+ y).^2 .* sin.(x.^2 + (H .+ y).^2)) .+ 1
-  f2ex(x,y) = (u2ex_xx(x,y) + u2ex_yy(x,y))
 
   u3ex(x,y) = cos.(x.^2 + (y .+ H).^2) + (y.^2)/2 .- (H * x + (1/2) * x.^2)
+  u3ex_x(x,y) = -H .- x .- 2 .* x .* sin.(x.^2 .+ (H .+ y).^2)
+  u3ex_y(x,y) = y .- 2 .* (H .+ y) .* sin.(x.^2 .+ (H .+ y).^2)
   u3ex_xx(x,y) = -1 .- 4 .* x.^2 .* cos.(x.^2 .+ (H .+ y).^2) .- 2 .* sin.(x.^2 .+ (H .+ y).^2)
   u3ex_yy(x,y) = 1 .- 4 .* (H .+ y).^2 .* cos.(x.^2 .+ (H .+ y).^2) .- 2 .* sin.(x.^2 .+ (H .+ y).^2)
-  f3ex(x,y) = (u3ex_xx(x,y) + u3ex_yy(x,y))
 
   vex(x,y,e) = begin
     if EToBlock[e] == 1
@@ -86,13 +89,35 @@ let
       error("invalid block")
     end
   end
+  vex_x(x,y,e) = begin
+    if EToBlock[e] == 1
+      return u1ex_x(x,y)
+    elseif EToBlock[e] == 2
+      return u2ex_x(x,y)
+    elseif EToBlock[e] == 3
+      return u3ex_x(x,y)
+    else
+      error("invalid block")
+    end
+  end
+  vex_y(x,y,e) = begin
+    if EToBlock[e] == 1
+      return u1ex_y(x,y)
+    elseif EToBlock[e] == 2
+      return u2ex_y(x,y)
+    elseif EToBlock[e] == 3
+      return u3ex_y(x,y)
+    else
+      error("invalid block")
+    end
+  end
   fex(x,y,e) = begin
     if EToBlock[e] == 1
-      return f1ex(x,y)
+      return u1ex_xx(x,y) + u1ex_yy(x,y)
     elseif EToBlock[e] == 2
-      return f2ex(x,y)
+      return u2ex_xx(x,y) + u2ex_yy(x,y)
     elseif EToBlock[e] == 3
-      return f3ex(x,y)
+      return u3ex_xx(x,y) + u3ex_yy(x,y)
     else
       error("invalid block")
     end
@@ -144,6 +169,16 @@ let
     (bλ, λ) = (zeros(λNp), zeros(λNp))
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
     δ = zeros(δNp)
+    for f = 1:nfaces
+      if FToB[f] ∈ (TOP_MAIN, BOTTOM_MAIN, BRANCH)
+        (e1, e2) = FToE[:, f]
+        (lf1, lf2) = FToLF[:, f]
+        (~, ~, L, (x, y), ~, ~, ~, ~, ~, ~, ~) = lop[e1]
+        xf = L[lf1] * x
+        yf = L[lf1] * y
+        @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] = vex(xf, yf, e2) - vex(xf, yf, e1)
+      end
+    end
 
     bc_Dirichlet = (lf, x, y, e, δ) -> vex(x,y,e)
     bc_Neumann   = (lf, x, y, nx, ny, e, δ) -> (nx .* vex_x(x, y, e)
@@ -215,7 +250,7 @@ let
       display(plot(p1, p2, p3, layout = (1,3)))
     end
   end
-  println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
+  @show ((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
 
   nothing
 end
