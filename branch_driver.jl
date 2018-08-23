@@ -34,7 +34,7 @@ let
   SBPp   = 4 # SBP interior order
 
   (verts, EToV, EToF, FToB, EToBlock) = read_inp_2d("meshes/branch.inp")
-  Lx = Ly = 10
+  Lx = Ly = 5
   H = 0.4 * Lx
   verts = Lx*verts
   N1 = N0 = 13
@@ -43,6 +43,28 @@ let
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
   @show (nelems, nfaces)
+  FToB2 = copy(FToB)
+  #=
+  for f = 1:nfaces
+    if FToB[f] ∈ (BC_NEUMANN,)
+      FToB[f] = BC_DIRICHLET
+    elseif FToB[f] ∈ (TOP_MAIN, BOTTOM_MAIN, BRANCH)
+      FToB[f] = BC_DIRICHLET
+    end
+  end
+  for f = 1:nfaces
+    if FToB[f] ∈ (BRANCH, BOTTOM_MAIN)
+      FToB[f] = BC_NEUMANN
+    end
+  end
+  for f = 1:nfaces
+    if FToB[f] ∈ (BC_NEUMANN,)
+      FToB[f] = BC_DIRICHLET
+    elseif FToB[f] ∈ (TOP_MAIN, BOTTOM_MAIN, BRANCH)
+      FToB[f] = BC_NEUMANN
+    end
+  end
+  =#
 
   EToN0 = zeros(Int64, 2, nelems)
   EToN0[1, :] .= N0
@@ -243,11 +265,60 @@ let
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
     @show (lvl, ϵ[lvl])
+    p4 = plot(legend=:none, title="T (main)")
+    p5 = plot(legend=:none, title="T (branch)")
+    p6 = plot(legend=:none, title="Tex (top main)")
+    p7 = plot(legend=:none, title="Tex (branch)")
+    p8 = plot(legend=:none, title="dT (bottom main)")
+    p9 = plot(legend=:none, title="dT (branch)")
+    # p4 = plot(legend=:none, title="u (main)")
+    # p5 = plot(legend=:none, title="u (branch)")
+    # p6 = plot(legend=:none, title="uex (top main)")
+    # p7 = plot(legend=:none, title="uex (branch)")
+    # p8 = plot(legend=:none, title="du (bottom main)")
+    # p9 = plot(legend=:none, title="du (branch)")
+    lw = 6
+    for f = 1:nfaces
+      if FToB2[f] ∈ (BOTTOM_MAIN, TOP_MAIN, BRANCH)
+        (e1, e2) = FToE[:, f]
+        (lf1, lf2) = FToLF[:, f]
+        (~, ~, L, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e1]
+        xf = L[lf1] * x
+        yf = L[lf1] * y
+        τex = vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
+        #=
+        (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
+                              EToO)
+        τ = (τm .+ τp) / 2
+        =#
+        δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+        τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+        τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
+        #=
+        τex = vex(xf,yf,e1)
+        vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+        τ = L[lf1] * vu
+        =#
+        if FToB2[f] ∈ (TOP_MAIN, BOTTOM_MAIN)
+          plot!(p4, yf, τ, linewidth = lw)
+          plot!(p6, yf, τex, linewidth = lw)
+          plot!(p8, yf, (τex-τ), linewidth = lw)
+        end
+        if FToB2[f] == BRANCH
+          plot!(p5, yf, τ, linewidth = lw)
+          plot!(p7, yf, τex, linewidth = lw)
+          plot!(p9, yf, (τex-τ), linewidth = lw)
+        end
+      end
+    end
     @plotting begin
-      plot!(p1, aspect_ratio = 1, camera = (15, 45), legend=:none)
-      plot!(p2, aspect_ratio = 1, camera = (15, 45), legend=:none)
-      plot!(p3, aspect_ratio = 1, camera = (15, 45), legend=:none)
-      display(plot(p1, p2, p3, layout = (1,3)))
+      plot!(p1, aspect_ratio = 1, camera = (15, 45), legend=:none, title="u")
+      plot!(p2, aspect_ratio = 1, camera = (15, 45), legend=:none, title="uex")
+      plot!(p3, aspect_ratio = 1, camera = (15, 45), legend=:none, title="Δu")
+      # display(plot(p1, p2, p3, layout = (1,3)))
+
+      display(plot(p4, p5, p6, p7, p8, p9,
+                   layout = grid(3,2,widths=[10/14, 4/14]), size = (1400, 800)))
     end
   end
   @show ((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
