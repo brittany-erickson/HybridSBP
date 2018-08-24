@@ -378,7 +378,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   Es0 = sparse([1], [1], [1], Nsp, Nsp)
   EsN = sparse([Nsp], [Nsp], [1], Nsp, Nsp)
 
-  if true
+  if false
     # Force fully compatible
     Sr0 = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Er0 * Dr))
     SrN = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (ErN * Dr))
@@ -442,10 +442,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   H4 = Hr
   H4I = HrI
 
-  τ1 = sparse(1:Nsp, 1:Nsp, 100*Nsp./sJ1)
-  τ2 = sparse(1:Nsp, 1:Nsp, 100*Nsp./sJ2)
-  τ3 = sparse(1:Nrp, 1:Nrp, 100*Nrp./sJ3)
-  τ4 = sparse(1:Nrp, 1:Nrp, 100*Nrp./sJ4)
+  τ1 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ1)
+  τ2 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ2)
+  τ3 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ3)
+  τ4 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ4)
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
   B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
@@ -1101,7 +1101,7 @@ function computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
     (~, F, L, ~, ~, sJ, nx, ~, ~, HfI, τ, G) = lop[e1]
     vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
     vol = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
-    return τ[lf1] * (L[lf1] * vu - (vλ .- δ/2)) - vol
+    return -(vol + τ[lf1] * (L[lf1] * vu - (vλ .- δ/2)))
   else
     (~, F, L, ~, ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
     vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]

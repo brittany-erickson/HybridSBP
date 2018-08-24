@@ -265,18 +265,22 @@ let
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
     @show (lvl, ϵ[lvl])
-    p4 = plot(legend=:none, title="T (main)")
-    p5 = plot(legend=:none, title="T (branch)")
-    p6 = plot(legend=:none, title="Tex (top main)")
-    p7 = plot(legend=:none, title="Tex (branch)")
-    p8 = plot(legend=:none, title="dT (bottom main)")
-    p9 = plot(legend=:none, title="dT (branch)")
-    # p4 = plot(legend=:none, title="u (main)")
-    # p5 = plot(legend=:none, title="u (branch)")
-    # p6 = plot(legend=:none, title="uex (top main)")
-    # p7 = plot(legend=:none, title="uex (branch)")
-    # p8 = plot(legend=:none, title="du (bottom main)")
-    # p9 = plot(legend=:none, title="du (branch)")
+    find_stress = false
+    if find_stress
+      p4 = plot(legend=:none, title="T (main)")
+      p5 = plot(legend=:none, title="T (branch)")
+      p6 = plot(legend=:none, title="Tex (top main)")
+      p7 = plot(legend=:none, title="Tex (branch)")
+      p8 = plot(legend=:none, title="dT (bottom main)")
+      p9 = plot(legend=:none, title="dT (branch)")
+    else
+      p4 = plot(legend=:none, title="u (main)")
+      p5 = plot(legend=:none, title="u (branch)")
+      p6 = plot(legend=:none, title="uex (top main)")
+      p7 = plot(legend=:none, title="uex (branch)")
+      p8 = plot(legend=:none, title="du (bottom main)")
+      p9 = plot(legend=:none, title="du (branch)")
+    end
     lw = 6
     for f = 1:nfaces
       if FToB2[f] ∈ (BOTTOM_MAIN, TOP_MAIN, BRANCH)
@@ -285,20 +289,24 @@ let
         (~, ~, L, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e1]
         xf = L[lf1] * x
         yf = L[lf1] * y
-        τex = vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
-        #=
-        (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
-                              EToO)
-        τ = (τm .+ τp) / 2
-        =#
-        δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
-        τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
-        τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
-        #=
-        τex = vex(xf,yf,e1)
-        vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
-        τ = L[lf1] * vu
-        =#
+        if find_stress
+          τex = vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
+          (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
+                                EToO)
+          τ = (τm .+ τp) / 2
+          #=
+          δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+          τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+          =#
+          # τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
+          # τex = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+        else
+          τex = vex(xf,yf,e1)
+          vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+          τ = L[lf1] * vu
+          # δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+          # τ = λ[FToλstarts[f]:(FToλstarts[f+1]-1)] - δ[δrng]/2
+        end
         if FToB2[f] ∈ (TOP_MAIN, BOTTOM_MAIN)
           plot!(p4, yf, τ, linewidth = lw)
           plot!(p6, yf, τex, linewidth = lw)
