@@ -1,0 +1,41 @@
+# RUN WITH CUBIT 15.2
+
+# Set units to SI.
+${Units('si')}
+
+#---------------
+reset
+
+${Lx=24}
+${Ly=24}
+
+create vertex    {-Lx}        0  0 #v1
+create vertex     {Lx}        0  0 #v2
+create vertex    {-Lx}    {-Ly}  0 #v3
+create vertex     {Lx}    {-Ly}  0 #v4
+create vertex        0        0  0 #v5
+create vertex        0    {-Ly}  0 #v6
+
+
+# Create Outer box
+create curve vertex  1 2 #c1
+create curve vertex  1 3 #c2
+create curve vertex  2 4 #c3
+create curve vertex  3 4 #c4
+create surface curve 1 2 3 4
+delete curve 1 2 3 4
+
+# Create Fault
+create curve vertex  5 6 #c5
+imprint tolerant surface 1 with curve 5 merge
+delete curve 5
+
+surface 2 3 size 1.2
+mesh surface 2 3
+Sideset 1 add curve 2 3      # Displacement (half V_p)
+Sideset 2 add curve 7 8 9 10 # Free
+Sideset 7 add curve 6        # Frictional fault
+
+export Abaqus "/Users/jekozdon/codes/D2_sbp/meshes/BP1_small_V0.inp"  overwrite
+
+

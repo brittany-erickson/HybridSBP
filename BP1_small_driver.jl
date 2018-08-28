@@ -37,55 +37,24 @@ let
   SBPp   = 2 # SBP interior order
 
   #=
-  Lx = 80
-  verts = ((-Lx,   0), (0,   0), (Lx,   0), # 1 2 3
-           (-Lx, -40), (0, -40), (Lx, -40), # 4 5 6
-           (-Lx, -80), (0, -80), (Lx, -80)) # 7 8 9
-  EToV = ((4, 5, 1, 2),
-          (5, 6, 2, 3),
-          (7, 8, 4, 5),
-          (8, 9, 5, 6))
-  EToF = ((1,  2,  3, 4),
-          (2,  5,  6, 7),
-          (8,  9, 10, 3),
-          (9, 11, 12, 6))
-  FToB = fill(BC_LOCKED_INTERFACE, (12,))
-  for f ∈ (1, 5, 8, 11)
-    FToB[f] = BC_DIRICHLET
-  end
-  for f ∈ (4, 7, 10, 12)
-    FToB[f] = BC_NEUMANN
-  end
-  for f ∈ (2,)
-    FToB[f] = RS_FAULT
-  end
-  for f ∈ (9,)
-    FToB[f] = VP_FAULT
-  end
-  N0 = 1600
-  N1 = 800
-  lvl = 1 # Refinement
-  base_name = "BP1_uniform"
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V1.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 13
-  lvl = 3 # Refinement
-  base_name = "BP1_mesh_$(lvl)"
-  base_name = "BP1_V1_$(lvl)"
-  =#
-
-  #=
-  =#
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
+  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_small_V0.inp")
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
+  N1 = N0 = 20
+  lvl = 2 # Refinement
+  τscale = 100
+  base_name = "BP1_small_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)"
+  =#
 
+  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_small_Lx36_V0.inp")
+  Lx = maximum(verts[1,:])
+  Ly = maximum(abs.(verts[2,:]))
+  N1 = N0 = 20
+  lvl = 2 # Refinement
+  τscale = 100
+  base_name = "BP1_small_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)"
+
+  #=
   r = verts[1,:]
   s = verts[2,:]
   x = @view verts[1,:]
@@ -93,7 +62,6 @@ let
   x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
   y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
   base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  #=
   =#
 
   #=
@@ -190,7 +158,8 @@ let
     yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
     # Build local operators
-    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]],
+                         τscale=τscale)
   end
   #}}}
 
@@ -253,8 +222,8 @@ let
   RSV0 = 1e-6
   RSVinit = 1e-9
   RSa = zeros(δNp)
-  RSH1 = 15;
-  RSH2 = 18;
+  RSH1 = 12;
+  RSH2 = 15;
   fault_y = zeros(δNp)
   for f = 1:nfaces
     if FToB[f] ∈ (RS_FAULT, VP_FAULT)

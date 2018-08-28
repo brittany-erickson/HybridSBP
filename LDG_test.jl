@@ -1,5 +1,4 @@
 using Plots
-pyplot()
 
 if VERSION <= v"0.6.999999"
   eigen = eig
@@ -260,7 +259,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [],
 
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
   (MIP, A, JH, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
-   (SJ1, SJ2, SJ3, SJ4),
+   (SJ1, SJ2, SJ3, SJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
+   (H1I, H2I, H3I, H4I),
    ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN)))
 end
 #}}}
@@ -297,19 +297,24 @@ end
 
 let
   p = 4
-  fully_compatible=false
+  fully_compatible=true
 
   xt = (r,s)->transfinite_blend(-0.75,  0, -1.1, 1.0, r, s)
   yt = (r,s)->transfinite_blend(-0.5, -1.0,  1.0, 0.25, r, s)
+  xt = (r,s)->transfinite_blend(-1.0,  1.0, -1.0, 1.0, r, s)
+  yt = (r,s)->transfinite_blend(-1.0, -1.0,  1.0, 1.0, r, s)
   # xt = (r,s)->transfinite_blend(-1.0,  1.0, -1.0, 1.0, r, s)
   # yt = (r,s)->transfinite_blend(-1.0, -1.0,  1.0, 1.0, r, s)
 
-  for lvl = 1:5
+  ϵIP = zeros(5)
+  ϵLDG = zeros(size(ϵIP))
+  for lvl = 1:length(ϵIP)
     Nr = 13 * 2^(lvl-1)
     Ns = 14 * 2^(lvl-1)
 
     (MIP, A, JH, (x,y), (G1, G2, G3, G4), (L1, L2, L3, L4), (H1, H2, H3, H4),
-     (SJ1, SJ2, SJ3, SJ4),
+     (SJ1, SJ2, SJ3, SJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
+     (H1I, H2I, H3I, H4I),
      ((crr0j, csr0j), (crrNj, csrNj), (cssi0, crsi0), (cssiN, crsiN))) =
     locoperator(p, Nr, Ns, xt, yt; fully_compatible=fully_compatible)
 
@@ -334,6 +339,8 @@ let
 
     (kx, ky) = (π, π)
     vex   = (x,y) ->       cos.(kx * x) .* cosh.(ky * y)
+    vex_x = (x,y) -> -kx * sin.(kx * x) .* cosh.(ky * y)
+    vex_y = (x,y) ->  ky * cos.(kx * x) .* sinh.(ky * y)
 
     λ1 = vex(L1 * x, L1 * y)
     λ2 = vex(L2 * x, L2 * y)
@@ -400,26 +407,51 @@ let
             L3' * Sλ3(λ1, λ2, λ3, λ4) + L4' * Sλ4(λ1, λ2, λ3, λ4) +
             G1' * λ1 + G2' * λ2 + G3' * λ3 + G4' * λ4)
 
+    #=
     if lvl < 3
       (E, V) = eigen(Matrix(MIP))
       println(extrema(E))
       (E, V) = eigen(Matrix(MLDG))
       println(extrema(E))
     end
+    =#
 
     uLDG = reshape(MLDG \ bLDG, Nr+1, Ns+1)
+
+    HI = H4I
+    G = G4
+    SJ = diag(SJ4)
+    L = L4
+    nx = nx4
+    ny = ny4
+    σIP1 = -(HI * (G * vex(x, y))) ./ SJ
+    σIP1 = -(HI * (G * uIP[:])) ./ SJ
+    σLDG1 = -(HI * (G * uLDG[:])) ./ SJ
+    x1 = L * x
+    y1 = L * y
+    σ1 = nx.*vex_x(x1, y1) + ny.*vex_y(x1, y1)
+
+    σIP1 = L * uIP[:]
+    σLDG1 = L * uLDG[:]
+    σ1 = vex(x1, y1)
+
+    p1 = plot(x1, σLDG1)
+    plot!(p1, x1, σIP1)
+    plot!(p1, x1, σ1)
+    p2 = plot(x1, log10.(abs.(σLDG1-σ1)))
+    plot!(p2, x1, log10.(abs.(σIP1-σ1)))
+    display(plot(p1, p2, layout = (2,1)))
 
     (X, Y) = (reshape(x, Nr+1, Ns+1), reshape(y, Nr+1, Ns+1))
     uex = vex(X, Y)
 
     ΔIP = uIP - uex
     ΔLDG = uLDG - uex
-    @views ϵIP = √(ΔIP[:]' * JH * ΔIP[:])
-    @views ϵLDG = √(ΔLDG[:]' * JH * ΔLDG[:])
-    println((lvl, ϵIP, ϵLDG))
+    @views ϵIP[lvl] = √(ΔIP[:]' * JH * ΔIP[:])
+    @views ϵLDG[lvl] = √(ΔLDG[:]' * JH * ΔLDG[:])
+    println((lvl, ϵIP[lvl], ϵLDG[lvl]))
 
     p1 = contour(X, Y, uex, aspect_ratio = 1)
-
     p2 = contour(X, Y, uIP, aspect_ratio = 1)
     p3 = contour(X, Y, uLDG, aspect_ratio = 1)
 
@@ -428,7 +460,9 @@ let
     plot!(p1, xe, ye, color=:black)
     plot!(p2, xe, ye, color=:black)
     plot!(p3, xe, ye, color=:black)
-    display(plot(p1, p2, p3, layout = (1,3), size = (2000, 800)))
+    # display(plot(p1, p2, p3, layout = (1,3), size = (2000, 800)))
   end
+  @show ((log.(ϵIP[1:end-1]) - log.(ϵIP[2:end])) / log(2))
+  @show ((log.(ϵLDG[1:end-1]) - log.(ϵLDG[2:end])) / log(2))
 
 end

@@ -26,20 +26,46 @@ if VERSION <= v"0.6.999999"
   using CholmodSolve2
 end
 
+using Compat.Printf: @sprintf
+
 let
-  TOP_MAIN = 7
-  BOTTOM_MAIN = 8
-  BRANCH = 9
+  SBPp    = 4 # SBP interior order
+  τscale  = 10
 
-  SBPp   = 4 # SBP interior order
+  Lx = Ly = 24
+  verts = ((-Lx,       0), (0,       0), (Lx,       0), # 1 2 3
+           (-Lx, -(Ly/2)), (0, -(Ly/2)), (Lx, -(Ly/2)), # 4 5 6
+           (-Lx,     -Ly), (0,     -Ly), (Lx,     -Ly)) # 7 8 9
+  EToV = ((4, 5, 1, 2),
+          (5, 6, 2, 3),
+          (7, 8, 4, 5),
+          (8, 9, 5, 6))
+  EToF = ((1,  2,  3, 4),
+          (2,  5,  6, 7),
+          (8,  9, 10, 3),
+          (9, 11, 12, 6))
+  FToB = fill(BC_LOCKED_INTERFACE, (12,))
+  EToBlock = (1,2,1,2)
+  for f ∈ (1, 5, 8, 11)
+    FToB[f] = BC_DIRICHLET
+  end
+  for f ∈ (4, 7, 10, 12)
+    FToB[f] = BC_NEUMANN
+  end
+  for f ∈ (2,9)
+    FToB[f] = BC_JUMP_INTERFACE
+  end
+  N0 = 48
+  N1 = 24
+  lvl = 1 # Refinement
 
-  (verts, EToV, EToF, FToB, EToBlock) = read_inp_2d("meshes/branch.inp")
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
-  Lx = Ly = 1
-  H = 0.4 * Lx
-  verts = Lx*verts
-  N1 = N0 = 13
 
+  if typeof(verts) <: Tuple
+    verts = flatten_tuples(verts)
+    EToV  = flatten_tuples(EToV)
+    EToF  = flatten_tuples(EToF)
+    EToBlock  = flatten_tuples(EToBlock)
+  end
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
@@ -83,23 +109,20 @@ let
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # Exact solution
-  u1ex(x,y) = cos.(x) .* cos.(π * y / Ly) .- (H .* x - (x.^2)/2)
-  u1ex_x(x,y) = -sin.(x) .* cos.(π * y / Ly) .- (H .- x)
-  u1ex_y(x,y) = -(π / Ly) * cos.(x) .* sin.(π * y / Ly)
-  u1ex_xx(x,y) = -cos.(x) .* cos.(π * y / Ly) .+ 1
-  u1ex_yy(x,y) = -(π/Ly)^2 .* cos.(x) .* cos.(π * y / Ly)
+  kx = (1 / Lx)
+  ky = (2 * π / Ly)
+  u1ex(x,y)    =         kx .* sin.(x) .* cos.(ky * y)
+  u1ex_x(x,y)  =         kx .* cos.(x) .* cos.(ky * y)
+  u1ex_xx(x,y) =        -kx .* sin.(x) .* cos.(ky * y)
+  u1ex_y(x,y)  = -ky   * kx .* sin.(x) .* sin.(ky * y)
+  u1ex_yy(x,y) = -ky^2 * kx .* sin.(x) .* cos.(ky * y)
 
-  u2ex(x,y) = 1 .+ sin.(x.^2 .+ (y .+ H).^2) .+ (y.^2)/2 .- (H * x .+ (x.^2)/2)
-  u2ex_x(x,y) = -H .- x .+ 2 .* x .* cos.(x.^2 .+ (H .+ y).^2)
-  u2ex_y(x,y) = y .+ 2 .* (H .+ y) .* cos.(x.^2 .+ (H .+ y).^2)
-  u2ex_xx(x,y) = 2 * (cos.(x.^2 .+ (y .+ H).^2) .- 2 * x.^2 .* sin.(x.^2 + (y .+ H).^2)) .- 1
-  u2ex_yy(x,y) = 2 * (cos.(x.^2 .+ (H .+ y).^2) .- 2 .* (H .+ y).^2 .* sin.(x.^2 + (H .+ y).^2)) .+ 1
+  u2ex(x,y)    =         exp.(kx * x) .* cos.(ky * y)
+  u2ex_x(x,y)  =  kx   * exp.(kx * x) .* cos.(ky * y)
+  u2ex_xx(x,y) =  kx^2 * exp.(kx * x) .* cos.(ky * y)
+  u2ex_y(x,y)  = -ky   * exp.(kx * x) .* sin.(ky * y)
+  u2ex_yy(x,y) = -ky^2 * exp.(kx * x) .* cos.(ky * y)
 
-  u3ex(x,y) = cos.(x.^2 + (y .+ H).^2) + (y.^2)/2 .- (H * x + (1/2) * x.^2)
-  u3ex_x(x,y) = -H .- x .- 2 .* x .* sin.(x.^2 .+ (H .+ y).^2)
-  u3ex_y(x,y) = y .- 2 .* (H .+ y) .* sin.(x.^2 .+ (H .+ y).^2)
-  u3ex_xx(x,y) = -1 .- 4 .* x.^2 .* cos.(x.^2 .+ (H .+ y).^2) .- 2 .* sin.(x.^2 .+ (H .+ y).^2)
-  u3ex_yy(x,y) = 1 .- 4 .* (H .+ y).^2 .* cos.(x.^2 .+ (H .+ y).^2) .- 2 .* sin.(x.^2 .+ (H .+ y).^2)
   @plotting (p1, p2, p3) = (plot(), plot(), plot())
   @plotting let
     # Do some plotting
@@ -123,7 +146,6 @@ let
     end
     plot!(p1, aspect_ratio = 1)
     display(plot!(p1, aspect_ratio = 1))
-    return
   end
 
   vex(x,y,e) = begin
@@ -131,8 +153,6 @@ let
       return u1ex(x,y)
     elseif EToBlock[e] == 2
       return u2ex(x,y)
-    elseif EToBlock[e] == 3
-      return u3ex(x,y)
     else
       error("invalid block")
     end
@@ -142,8 +162,6 @@ let
       return u1ex_x(x,y)
     elseif EToBlock[e] == 2
       return u2ex_x(x,y)
-    elseif EToBlock[e] == 3
-      return u3ex_x(x,y)
     else
       error("invalid block")
     end
@@ -153,8 +171,6 @@ let
       return u1ex_y(x,y)
     elseif EToBlock[e] == 2
       return u2ex_y(x,y)
-    elseif EToBlock[e] == 3
-      return u3ex_y(x,y)
     else
       error("invalid block")
     end
@@ -164,14 +180,12 @@ let
       return u1ex_xx(x,y) + u1ex_yy(x,y)
     elseif EToBlock[e] == 2
       return u2ex_xx(x,y) + u2ex_yy(x,y)
-    elseif EToBlock[e] == 3
-      return u3ex_xx(x,y) + u3ex_yy(x,y)
     else
       error("invalid block")
     end
   end
 
-  ϵ = zeros(4)
+  ϵ = zeros(2)
   for lvl = 1:length(ϵ)
     # Set up the local grid dimensions
     Nr = EToN0[1, :] * (2^(lvl-1))
@@ -179,7 +193,7 @@ let
 
     #{{{ Build the local volume operators
     # Dictionary to store the operators
-    OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
+    OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s; τscale=τscale))
     lop = Dict{Int64, OPTYPE}()
     for e = 1:nelems
       # @show (e, nelems)
@@ -191,7 +205,8 @@ let
       yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
       # Build local operators
-      lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+      lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]];
+                           τscale=τscale)
     end
     #}}}
 
@@ -218,7 +233,7 @@ let
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
     δ = zeros(δNp)
     for f = 1:nfaces
-      if FToB[f] ∈ (TOP_MAIN, BOTTOM_MAIN, BRANCH)
+      if FToB[f] ∈ (BC_JUMP_INTERFACE,)
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
         (~, ~, L, (x, y), ~, ~, ~, ~, ~, ~, ~) = lop[e1]
@@ -291,58 +306,42 @@ let
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
     @show (lvl, ϵ[lvl])
-    find_stress = false
-    if find_stress
-      p4 = plot(legend=:none, title="T (main)")
-      p5 = plot(legend=:none, title="T (branch)")
-      p6 = plot(legend=:none, title="Tex (top main)")
-      p7 = plot(legend=:none, title="Tex (branch)")
-      p8 = plot(legend=:none, title="dT (bottom main)")
-      p9 = plot(legend=:none, title="dT (branch)")
-    else
-      p4 = plot(legend=:none, title="u (main)")
-      p5 = plot(legend=:none, title="u (branch)")
-      p6 = plot(legend=:none, title="uex (top main)")
-      p7 = plot(legend=:none, title="uex (branch)")
-      p8 = plot(legend=:none, title="du (bottom main)")
-      p9 = plot(legend=:none, title="du (branch)")
-    end
+    p4 = plot(legend=:none, title="T")
+    p5 = plot(legend=:none, title="dT")
+    p6 = plot(legend=:none, title="u")
+    p7 = plot(legend=:none, title="du")
     lw = 6
     for f = 1:nfaces
-      if FToB2[f] ∈ (BOTTOM_MAIN, TOP_MAIN, BRANCH)
+      if FToB2[f] ∈ (BC_JUMP_INTERFACE,)
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
-        (~, ~, L, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e1]
-        xf = L[lf1] * x
-        yf = L[lf1] * y
-        if find_stress
-          τex = vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
-          (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
-                                EToO)
-          τ = (τm .+ τp) / 2
-          #=
-          δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
-          τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
-          =#
-          # τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
-          # τex = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
-        else
-          τex = vex(xf,yf,e1)
-          vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
-          τ = L[lf1] * vu
-          # δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
-          # τ = λ[FToλstarts[f]:(FToλstarts[f+1]-1)] - δ[δrng]/2
-        end
-        if FToB2[f] ∈ (TOP_MAIN, BOTTOM_MAIN)
-          plot!(p4, yf, τ, linewidth = lw)
-          plot!(p6, yf, τex, linewidth = lw)
-          plot!(p8, yf, (τex-τ), linewidth = lw)
-        end
-        if FToB2[f] == BRANCH
-          plot!(p5, yf, τ, linewidth = lw)
-          plot!(p7, yf, τex, linewidth = lw)
-          plot!(p9, yf, (τex-τ), linewidth = lw)
-        end
+        (~, ~, L1, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e1]
+        xf = L1[lf1] * x
+        yf = L1[lf1] * y
+        (~, ~, L2, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e2]
+
+        μ = 32
+        τex = μ * vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
+        (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
+                              EToO)
+        τ = μ * (τm .+ τp) / 2
+        #=
+        δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+        τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+        =#
+        # τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
+        # τex = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+        plot!(p4, yf, τex, linewidth = lw)
+        plot!(p4, yf, τ, marker=5, linewidth = 0)
+        plot!(p5, yf, abs.(τex-τ), linewidth = lw)
+
+        wex = vex(xf,yf,e1) - vex(xf,yf,e2)
+        vu1 = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+        vu2 = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
+        w = (L1[lf1] * vu1) - (L2[lf2] * vu2)
+        plot!(p6, yf, wex, linewidth = lw)
+        plot!(p6, yf, w, marker= 5, linewidth = 0)
+        plot!(p7, yf, abs.(wex-w), linewidth = lw)
       end
     end
     @plotting begin
@@ -351,8 +350,8 @@ let
       plot!(p3, aspect_ratio = 1, camera = (15, 45), legend=:none, title="Δu")
       # display(plot(p1, p2, p3, layout = (1,3)))
 
-      display(plot(p4, p5, p6, p7, p8, p9,
-                   layout = grid(3,2,widths=[10/14, 4/14]), size = (1400, 800)))
+      display(plot(p4, p6, p5, p7, layout = (2,2), size = (1400, 1400)))
+      savefig((@sprintf "compare_p%d_lvl%d_pt%e.pdf" SBPp lvl τscale))
     end
   end
   @show ((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))

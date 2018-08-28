@@ -34,9 +34,8 @@ let
   VP_FAULT = 8
   sim_years = 3000.
   year_seconds = 31556926.
-  SBPp   = 2 # SBP interior order
+  SBPp   = 4 # SBP interior order
 
-  #=
   Lx = 80
   verts = ((-Lx,   0), (0,   0), (Lx,   0), # 1 2 3
            (-Lx, -40), (0, -40), (Lx, -40), # 4 5 6
@@ -66,7 +65,6 @@ let
   N1 = 800
   lvl = 1 # Refinement
   base_name = "BP1_uniform"
-  =#
 
   #=
   (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V1.inp")
@@ -78,7 +76,6 @@ let
   =#
 
   #=
-  =#
   (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
@@ -86,6 +83,7 @@ let
   lvl = 1 # Refinement
   base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
 
+  #=
   r = verts[1,:]
   s = verts[2,:]
   x = @view verts[1,:]
@@ -93,7 +91,7 @@ let
   x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
   y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
   base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  #=
+  =#
   =#
 
   #=
@@ -181,7 +179,7 @@ let
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   lop = Dict{Int64, OPTYPE}()
   for e = 1:nelems
-    # @show (e, nelems)
+    @show (e, nelems)
     # Get the element corners
     (x1, x2, x3, x4) = verts[1, EToV[:, e]]
     (y1, y2, y3, y4) = verts[2, EToV[:, e]]
@@ -195,10 +193,12 @@ let
   #}}}
 
   # Assemble the global volume operators
-  (M, T, D, vstarts, FToλstarts) =
-  LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                       (x) -> cholesky(Symmetric(x)))
-  locfactors = M.F
+  (vstarts, M, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
+
+  # Build the trace operators
+  (FToλstarts, T, D) = gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS,
+                                 Nr, Ns)
+  λNp = FToλstarts[nfaces+1]-1
 
   # Get a unique array indexes for the face to jumps map
   FToδstarts = bcstarts(FToB, FToE, FToLF, (RS_FAULT,VP_FAULT), Nr, Ns)
@@ -209,12 +209,13 @@ let
   δNp = FToδstarts[nfaces+1]-1
   @show (VNp, λNp, δNp)
 
-  # Build the (sparse) λ matrix using the schur complement and factor
-  B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
-  BF = cholesky(Symmetric(B))
+  A = [ M -T'; -T  Diagonal(D) ]
+  AF = cholesky(Symmetric(A))
 
   # Set up some needed arrays
-  (bλ, λ, u, g) = (zeros(λNp), zeros(λNp), zeros(VNp), zeros(VNp))
+  (uλ, g) = (zeros(VNp + λNp), zeros(VNp+λNp))
+  u = @view uλ[1:VNp]
+  λ = @view uλ[VNp+(1:λNp)]
 
   #{{{ Compute the boundary/interface functions
   Vp = 1e-9
@@ -318,20 +319,7 @@ let
         locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
                     bc_Dirichlet, bc_Neumann, in_jump, (e, δ, t))
       end
-      LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
-      λ[:] = BF \ bλ
-
-      u[:] = T' * λ
-      u[:] .= g .+ u
-      for e = 1:nelems
-        F = locfactors[e]
-
-        if ~lockedblock[e]
-          # @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
-          ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-                (@view u[vstarts[e]:(vstarts[e+1]-1)]))
-        end
-      end
+      uλ[:] = AF \ g
 
       # Compute the shear-traction and update velocity
       show_val = false
@@ -341,11 +329,7 @@ let
           (lf1, lf2) = FToLF[:, f]
           δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
 
-          #=
-          τ[δrng] = μshear * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
-                                       FToLF; δ=δ[δrng])
-          =#
-          (τm[δrng], τp[δrng]) = computeTz4(f, λ, FToλstarts, u, vstarts, lop,
+          (τm[δrng], τp[δrng]) = computeTz5(f, FToλstarts, u, vstarts, lop,
                                             FToE, FToLF, EToO)
           (τm[δrng], τp[δrng]) = (μshear * τm[δrng], μshear * τp[δrng])
           τ[δrng] .= (τm[δrng] .+ τp[δrng]) / 2

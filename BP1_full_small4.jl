@@ -36,11 +36,10 @@ let
   year_seconds = 31556926.
   SBPp   = 2 # SBP interior order
 
-  #=
-  Lx = 80
-  verts = ((-Lx,   0), (0,   0), (Lx,   0), # 1 2 3
-           (-Lx, -40), (0, -40), (Lx, -40), # 4 5 6
-           (-Lx, -80), (0, -80), (Lx, -80)) # 7 8 9
+  Ly = Lx = 36
+  verts = ((-Lx,     0), (0,     0), (Lx,     0), # 1 2 3
+           (-Lx, -Ly/2), (0, -Ly/2), (Lx, -Ly/2), # 4 5 6
+           (-Lx,   -Ly), (0,   -Ly), (Lx,   -Ly)) # 7 8 9
   EToV = ((4, 5, 1, 2),
           (5, 6, 2, 3),
           (7, 8, 4, 5),
@@ -56,53 +55,15 @@ let
   for f ∈ (4, 7, 10, 12)
     FToB[f] = BC_NEUMANN
   end
-  for f ∈ (2,)
+  for f ∈ (2,9)
     FToB[f] = RS_FAULT
   end
-  for f ∈ (9,)
-    FToB[f] = VP_FAULT
-  end
-  N0 = 1600
-  N1 = 800
+  N0 = round(400*Lx/24)
+  N1 = round(200*Ly/24)
+  @show (N0,N1)
   lvl = 1 # Refinement
-  base_name = "BP1_uniform"
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V1.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 13
-  lvl = 3 # Refinement
-  base_name = "BP1_mesh_$(lvl)"
-  base_name = "BP1_V1_$(lvl)"
-  =#
-
-  #=
-  =#
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
-  Lx = maximum(verts[1,:])
-  Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
-
-  r = verts[1,:]
-  s = verts[2,:]
-  x = @view verts[1,:]
-  y = @view verts[2,:]
-  x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
-  y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
-  base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  #=
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V2.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V2_$(lvl)"
-  =#
+  τscale = 100
+  base_name = "BP1_uniform_small4_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx$(Lx)"
 
   if typeof(verts) <: Tuple
     verts = flatten_tuples(verts)
@@ -181,7 +142,7 @@ let
   OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
   lop = Dict{Int64, OPTYPE}()
   for e = 1:nelems
-    # @show (e, nelems)
+    @show (e, nelems)
     # Get the element corners
     (x1, x2, x3, x4) = verts[1, EToV[:, e]]
     (y1, y2, y3, y4) = verts[2, EToV[:, e]]
@@ -190,15 +151,18 @@ let
     yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
     # Build local operators
-    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]],
+                         τscale=τscale)
   end
   #}}}
 
   # Assemble the global volume operators
-  (M, T, D, vstarts, FToλstarts) =
-  LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                       (x) -> cholesky(Symmetric(x)))
-  locfactors = M.F
+  (vstarts, M, H, X, Y, E) = glovoloperator(lop, Nr, Ns)
+
+  # Build the trace operators
+  (FToλstarts, T, D) = gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS,
+                                    Nr, Ns)
+  λNp = FToλstarts[nfaces+1]-1
 
   # Get a unique array indexes for the face to jumps map
   FToδstarts = bcstarts(FToB, FToE, FToLF, (RS_FAULT,VP_FAULT), Nr, Ns)
@@ -209,12 +173,13 @@ let
   δNp = FToδstarts[nfaces+1]-1
   @show (VNp, λNp, δNp)
 
-  # Build the (sparse) λ matrix using the schur complement and factor
-  B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
-  BF = cholesky(Symmetric(B))
+  A = [ M -T'; -T  Diagonal(D) ]
+  AF = cholesky(Symmetric(A))
 
   # Set up some needed arrays
-  (bλ, λ, u, g) = (zeros(λNp), zeros(λNp), zeros(VNp), zeros(VNp))
+  (uλ, g) = (zeros(VNp + λNp), zeros(VNp+λNp))
+  u = @view uλ[1:VNp]
+  λ = @view uλ[VNp+(1:λNp)]
 
   #{{{ Compute the boundary/interface functions
   Vp = 1e-9
@@ -253,8 +218,8 @@ let
   RSV0 = 1e-6
   RSVinit = 1e-9
   RSa = zeros(δNp)
-  RSH1 = 15;
-  RSH2 = 18;
+  RSH1 = 12;
+  RSH2 = 15;
   fault_y = zeros(δNp)
   for f = 1:nfaces
     if FToB[f] ∈ (RS_FAULT, VP_FAULT)
@@ -318,20 +283,7 @@ let
         locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
                     bc_Dirichlet, bc_Neumann, in_jump, (e, δ, t))
       end
-      LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
-      λ[:] = BF \ bλ
-
-      u[:] = T' * λ
-      u[:] .= g .+ u
-      for e = 1:nelems
-        F = locfactors[e]
-
-        if ~lockedblock[e]
-          # @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
-          ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-                (@view u[vstarts[e]:(vstarts[e+1]-1)]))
-        end
-      end
+      uλ[:] = AF \ g
 
       # Compute the shear-traction and update velocity
       show_val = false
@@ -341,11 +293,7 @@ let
           (lf1, lf2) = FToLF[:, f]
           δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
 
-          #=
-          τ[δrng] = μshear * computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE,
-                                       FToLF; δ=δ[δrng])
-          =#
-          (τm[δrng], τp[δrng]) = computeTz4(f, λ, FToλstarts, u, vstarts, lop,
+          (τm[δrng], τp[δrng]) = computeTz5(f, FToλstarts, u, vstarts, lop,
                                             FToE, FToLF, EToO)
           (τm[δrng], τp[δrng]) = (μshear * τm[δrng], μshear * τp[δrng])
           τ[δrng] .= (τm[δrng] .+ τp[δrng]) / 2

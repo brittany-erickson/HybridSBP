@@ -220,7 +220,7 @@ end
 #}}}
 
 #{{{ locoperator
-function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
+function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 10)
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp
@@ -442,10 +442,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [])
   H4 = Hr
   H4I = HrI
 
-  τ1 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ1)
-  τ2 = sparse(1:Nsp, 1:Nsp, 10*Nsp./sJ2)
-  τ3 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ3)
-  τ4 = sparse(1:Nrp, 1:Nrp, 10*Nrp./sJ4)
+  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Nsp./sJ1)
+  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Nsp./sJ2)
+  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nrp./sJ3)
+  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nrp./sJ4)
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
   B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
@@ -1168,7 +1168,21 @@ function computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
   (vol2-vol1)/2
 end
 function computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
+  computeTz5(f, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
+end
+#=
+function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
+                   δ=0)
   vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+  (e1, e2) = FToE[:, f]
+  (lf1, lf2) = FToLF[:, f]
+  (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
+  vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
+  vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
+  return τ[lf1] * (vλ .- δ/2) - vol
+end
+=#
+function computeTz5(f, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
 
@@ -1185,18 +1199,6 @@ function computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
 
   (vol2, -vol1)
 end
-#=
-function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
-                   δ=0)
-  vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
-  (e1, e2) = FToE[:, f]
-  (lf1, lf2) = FToLF[:, f]
-  (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
-  vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
-  vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
-  return τ[lf1] * (vλ .- δ/2) - vol
-end
-=#
 
 
 function rateandstate(V, psi, σn, ϕ, η, a, V0)

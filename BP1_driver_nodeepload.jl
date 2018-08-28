@@ -83,17 +83,17 @@ let
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
   N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
+  lvl = 2 # Refinement
+  base_name = "BP1_V0_nodeepload_p_$(SBPp)_lvl_$(lvl)"
 
+  #=
   r = verts[1,:]
   s = verts[2,:]
   x = @view verts[1,:]
   y = @view verts[2,:]
   x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
   y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
-  base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  #=
+  base_name = "BP1_V0_nodeepload_skew_p_$(SBPp)_lvl_$(lvl)"
   =#
 
   #=
@@ -278,7 +278,7 @@ let
   ψ0 = RSf0 .+ RSb .* log.(RSV0 .* θ ./ RSDc)
 
   for f = 1:nfaces
-    if FToB[f] == RS_FAULT
+    if FToB[f] ∈ (RS_FAULT, VP_FAULT)
       (e1, e2) = FToE[:, f]
       (lf1, lf2) = FToLF[:, f]
       (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
@@ -336,7 +336,7 @@ let
       # Compute the shear-traction and update velocity
       show_val = false
       for f = 1:nfaces
-        if FToB[f] == RS_FAULT
+        if FToB[f] ∈ (RS_FAULT, VP_FAULT)
           (e1, e2) = FToE[:, f]
           (lf1, lf2) = FToLF[:, f]
           δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
@@ -394,13 +394,6 @@ let
               return
             end
 
-          end
-        elseif FToB[f] == VP_FAULT
-          (e1, ~) = FToE[:, f]
-          (lf1, ~) = FToLF[:, f]
-          (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
-          for δn = FToδstarts[f]:(FToδstarts[f+1]-1)
-            V[δn] = sign(nx[lf1][1]) * Vp
           end
         end
       end
