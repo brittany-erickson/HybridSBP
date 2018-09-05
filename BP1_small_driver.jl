@@ -11,6 +11,7 @@ if mtime_global_curved < mtime("global_curved.jl")
   println("including global_curved")
   include("global_curved.jl")
   mtime_global_curved = mtime("global_curved.jl")
+  println("done including global_curved")
 end
 if VERSION < v"0.6.999999"
   macro isdefined(s::Symbol)
@@ -49,8 +50,8 @@ let
   (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_small_Lx36_V0.inp")
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 20
-  lvl = 2 # Refinement
+  N1 = N0 = 100
+  lvl = 1 # Refinement
   τscale = 100
   base_name = "BP1_small_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)"
 
