@@ -442,10 +442,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 10)
   H4 = Hr
   H4I = HrI
 
-  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Nsp./sJ1)
-  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Nsp./sJ2)
-  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nrp./sJ3)
-  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nrp./sJ4)
+  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ1))
+  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ2))
+  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ3))
+  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ4))
 
   # TODO: Check signs on Q terms (and update write up with correct signs)
   B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)

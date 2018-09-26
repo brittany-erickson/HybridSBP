@@ -17,10 +17,17 @@ let
                             ("BP1_V0_nodeepload_skew_p_2_lvl_1", "no deep load, skew"))
   =#
   for (base_name, title) = (
+                            # ("BP1_small_SBPp2_ptsc100_lvl1", "many blocks, Lx 36"),
                             # ("BP1_V0_nodeepload_p_2_lvl_2", "no deep load"),
                             # ("BP1_uniform_small4_SBPp2_ptsc100_lvl2", "4 block, refined"),
-                            ("BP1_uniform_small4_SBPp2_ptsc100_lvl1_Lx36", "Lx36"),
-                            # ("BP1_uniform_small_SBPp2_ptsc100_lvl1_Lx36", "Lx36"),
+                            # ("BP1_uniform_small4_SBPp2_ptsc100_lvl1_Lx36", "4 blocks, Lx36"),
+                            # ("BP1_uniform_small_SBPp2_ptsc100_lvl1_Lx36", "2 blocks Lx36"),
+                            ("hamming_data/BP1_small_SBPp2_ptsc10000_lvl1_Lx36", "many block, Lx 36, ref 1, penalty 10000"),
+                            ("hamming_data/BP1_small_SBPp2_ptsc1000_lvl1_Lx36", "many block, Lx 36, ref 1, penalty 1000"),
+                            ("hamming_data/BP1_small_SBPp2_ptsc100_lvl2_Lx36", "many block, Lx 36, ref 2, penalty 100"),
+                            ("hamming_data/BP1_small_SBPp2_ptsc10000_lvl2_Lx36", "many block, Lx 36, ref 2, penalty 10000"),
+                            ("hamming_data/BP1_small_SBPp2_ptsc100_lvl1", "many block, Lx 36, ref 1, penalty 100"),
+                            ("hamming_data/BP1_small_SBPp4_ptsc100_lvl1_Lx36", "SBP 4, many block, Lx 36, ref 1, penalty 100"),
                            )
     @show (base_name, title)
     y = open("$(base_name)_slip.dat") do f
@@ -49,7 +56,7 @@ let
         end
       end
     end
-    display(plot!(p1, ylims=(-20, 0), xlims=(0, 20), title=title))
+    display(plot!(p1, ylims=(-36, 0), xlims=(0, 20), title=title))
     savefig("$(base_name).pdf")
   end
 end

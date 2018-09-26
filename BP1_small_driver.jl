@@ -53,7 +53,7 @@ let
   N1 = N0 = 100
   lvl = 1 # Refinement
   τscale = 100
-  base_name = "BP1_small_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)"
+  base_name = "BP1_small_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx36"
 
   #=
   r = verts[1,:]
