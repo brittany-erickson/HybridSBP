@@ -32,8 +32,9 @@ let
   SBPp    = 2 # SBP interior order
   τscale  = 12
 
-  verts = ((-3, 3), (0, 3), (3, 3),  # 1 2 3
-           (-3, 0), (0, 0), (3, 0))  # 4 5 6
+  Ly = 1
+  verts = ((-Ly, Ly), (0, Ly), (Ly, Ly),  # 1 2 3
+           (-Ly,  0), (0,  0), (Ly,  0))  # 4 5 6
   EToV = ((4, 5, 1, 2),
           (5, 6, 2, 3))
   EToF = ((1,  2,  3, 4),
@@ -63,8 +64,8 @@ let
     FToB[f] = BC_NEUMANN
   end
 
-  N0 = 2
-  N1 = 2
+  N0 = 6
+  N1 = 6
   lvl = 1 # Refinement
 
 
@@ -121,6 +122,7 @@ let
     display(plot!(p1, aspect_ratio = 1))
   end
 
+  ϵ = [0.0]
   begin
     # Set up the local grid dimensions
     Nr = EToN0[1, :] * (2^(lvl-1))
@@ -168,8 +170,55 @@ let
     B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
     println("Schur complement matrix")
     display(full(B))
-    return
     BF = cholesky(Symmetric(B))
+
+    Κ = 2 * π / Ly
+    u1ex(x, y)    =         cos.(Κ .* y).*sinh.(Κ .* x)
+    u1ex_x(x, y)  =  Κ   .* cos.(Κ .* y).*cosh.(Κ .* x)
+    u1ex_xx(x, y) =  Κ^2 .* cos.(Κ .* y).*sinh.(Κ .* x)
+    u1ex_y(x, y)  = -Κ   .* sin.(Κ .* y).*sinh.(Κ .* x)
+    u1ex_yy(x, y) = -Κ^2 .* cos.(Κ .* y).*sinh.(Κ .* x)
+    u2ex(x, y)    = u1ex(x, y)
+    u2ex_x(x, y)  = u1ex_x(x, y)
+    u2ex_xx(x, y) = u1ex_xx(x, y)
+    u2ex_y(x, y)  = u1ex_y(x, y)
+    u2ex_yy(x, y) = u1ex_yy(x, y)
+    vex(x,y,e) = begin
+      if EToBlock[e] == 1
+        return u1ex(x,y)
+      elseif EToBlock[e] == 2
+        return u2ex(x,y)
+      else
+        error("invalid block")
+      end
+    end
+    vex_x(x,y,e) = begin
+      if EToBlock[e] == 1
+        return u1ex_x(x,y)
+      elseif EToBlock[e] == 2
+        return u2ex_x(x,y)
+      else
+        error("invalid block")
+      end
+    end
+    vex_y(x,y,e) = begin
+      if EToBlock[e] == 1
+        return u1ex_y(x,y)
+      elseif EToBlock[e] == 2
+        return u2ex_y(x,y)
+      else
+        error("invalid block")
+      end
+    end
+    fex(x,y,e) = begin
+      if EToBlock[e] == 1
+        return u1ex_xx(x,y) + u1ex_yy(x,y)
+      elseif EToBlock[e] == 2
+        return u2ex_xx(x,y) + u2ex_yy(x,y)
+      else
+        error("invalid block")
+      end
+    end
 
     (bλ, λ) = (zeros(λNp), zeros(λNp))
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
@@ -262,17 +311,34 @@ let
         yf = L1[lf1] * y
         (~, ~, L2, (x, y), ~, ~, nx, ny, ~, ~, ~) = lop[e2]
 
-        μ = 32
+        @show (e1, e2)
+        μ = 1
         τex = μ * vex_x(xf,yf,e1) .* nx[lf1] + vex_y(xf,yf,e1) .* ny[lf1]
         (τm, τp) = computeTz4(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF,
                               EToO)
         τ = μ * (τm .+ τp) / 2
+
+
         #=
         δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
         τ = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
         =#
         # τex = computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO; δ=δ[δrng])
         # τex = computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF; δ=δ[δrng])
+        @show τex
+        @show τ
+        show(IOContext(STDOUT, :compact=>false), "text/plain", τ)
+        if N1 == 2
+          τb = [8.349632870302145, -8.349632870301747, 8.349632870302059]
+        elseif N1 == 6
+          τb = [-4.569104922793947, -2.085182020520092, 2.191888832291689,
+                4.355691299250644, 2.191888832291683, -2.085182020520103,
+                -4.569104922793965]
+        end
+
+        println()
+        show(IOContext(STDOUT, :compact=>false), "text/plain", τ+τb)
+        println()
         plot!(p4, yf, τex, linewidth = lw)
         plot!(p4, yf, τ, marker=5, linewidth = 0)
         plot!(p5, yf, abs.(τex-τ), linewidth = lw)
