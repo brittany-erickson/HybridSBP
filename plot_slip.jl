@@ -16,6 +16,7 @@ let
   for (base_name, title) = (("BP1_V0_nodeepload_p_2_lvl_2", "no deep load"),
                             ("BP1_V0_nodeepload_skew_p_2_lvl_1", "no deep load, skew"))
   =#
+  #=
   for (base_name, title) = (
                             # ("BP1_small_SBPp2_ptsc100_lvl1", "many blocks, Lx 36"),
                             # ("BP1_V0_nodeepload_p_2_lvl_2", "no deep load"),
@@ -29,6 +30,9 @@ let
                             ("hamming_data/BP1_small_SBPp2_ptsc100_lvl1", "many block, Lx 36, ref 1, penalty 100"),
                             ("hamming_data/BP1_small_SBPp4_ptsc100_lvl1_Lx36", "SBP 4, many block, Lx 36, ref 1, penalty 100"),
                            )
+    =#
+    for (base_name, title) = (("compare_BP1_2block_SBPp2_ptsc12_lvl1_Lx36",
+                               "BP1 comparison"),)
     @show (base_name, title)
     y = open("$(base_name)_slip.dat") do f
       node_data = split(readline(f))
