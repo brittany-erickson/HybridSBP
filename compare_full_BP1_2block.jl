@@ -34,73 +34,33 @@ let
   VP_FAULT = 8
   sim_years = 3000.
   year_seconds = 31556926.
-  SBPp   = 4 # SBP interior order
+  SBPp   = 2 # SBP interior order
 
-  Lx = 80
+  Ly = 60
+  Lx = 40
   verts = ((-Lx,   0), (0,   0), (Lx,   0), # 1 2 3
-           (-Lx, -40), (0, -40), (Lx, -40), # 4 5 6
-           (-Lx, -80), (0, -80), (Lx, -80)) # 7 8 9
-  EToV = ((4, 5, 1, 2),
-          (5, 6, 2, 3),
-          (7, 8, 4, 5),
-          (8, 9, 5, 6))
+           (-Lx, -Ly), (0, -Ly), (Lx, -Ly)) # 4 5 6
+  EToV = ((5, 2, 4, 1),
+          (6, 3, 5, 2))
   EToF = ((1,  2,  3, 4),
-          (2,  5,  6, 7),
-          (8,  9, 10, 3),
-          (9, 11, 12, 6))
-  FToB = fill(BC_LOCKED_INTERFACE, (12,))
-  for f ∈ (1, 5, 8, 11)
+          (5,  6,  7, 3))
+  FToB = fill(BC_LOCKED_INTERFACE, (7,))
+  EToBlock = (1,2)
+  for f ∈ (4, 7)
     FToB[f] = BC_DIRICHLET
   end
-  for f ∈ (4, 7, 10, 12)
-    FToB[f] = BC_NEUMANN
-  end
-  for f ∈ (2,)
+  for f ∈ (3,)
     FToB[f] = RS_FAULT
   end
-  for f ∈ (9,)
-    FToB[f] = VP_FAULT
+  for f ∈ (1,2,5,6,)
+    FToB[f] = BC_NEUMANN
   end
-  N0 = 1600
-  N1 = 800
-  lvl = 1 # Refinement
-  base_name = "BP1_uniform"
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V1.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 13
-  lvl = 3 # Refinement
-  base_name = "BP1_mesh_$(lvl)"
-  base_name = "BP1_V1_$(lvl)"
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
-  Lx = maximum(verts[1,:])
-  Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
-
-  #=
-  r = verts[1,:]
-  s = verts[2,:]
-  x = @view verts[1,:]
-  y = @view verts[2,:]
-  x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
-  y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
-  base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  =#
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V2.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V2_$(lvl)"
-  =#
+  N0 = 400
+  N1 = 600
+  @show (N0,N1)
+  lvl = 2 # Refinement
+  τscale = 12
+  base_name = "compare_full_BP1_psi_norm_2block_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx$(Lx)"
 
   if typeof(verts) <: Tuple
     verts = flatten_tuples(verts)
@@ -188,7 +148,8 @@ let
     yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
     # Build local operators
-    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]],
+                         τscale=τscale)
   end
   #}}}
 
@@ -197,7 +158,7 @@ let
 
   # Build the trace operators
   (FToλstarts, T, D) = gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS,
-                                 Nr, Ns)
+                                    Nr, Ns)
   λNp = FToλstarts[nfaces+1]-1
 
   # Get a unique array indexes for the face to jumps map
@@ -249,13 +210,13 @@ let
   RSamin = 0.010
   RSamax = 0.025
   RSb = 0.015
-  RSDc = 0.008
+  RSDc = 0.016
   RSf0 = 0.6
   RSV0 = 1e-6
   RSVinit = 1e-9
   RSa = zeros(δNp)
-  RSH1 = 15;
-  RSH2 = 18;
+  RSH1 = 12;
+  RSH2 = 15;
   fault_y = zeros(δNp)
   for f = 1:nfaces
     if FToB[f] ∈ (RS_FAULT, VP_FAULT)
@@ -336,48 +297,57 @@ let
 
           for n = 1:length(δrng)
             δn = δrng[n]
-            τ[δn] .= τ[δn] .+ τz0[δn]
-            if isnan(τ[δn])
-              reject_step[1] = true
-              return
-            end
-            VR = abs(τ[δn] / η)
-            VL = -VR
-            (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ[δn], σn[δn],
-                                                           τ[δn], η, RSa[δn],
-                                                           RSV0),
-                                       VL, VR, 0.0; atolx=1e-9, rtolx=1e-9,
-                                       ftol=1e-9)
-            if show_val
-              show_val = false
-              @show (ψ[δn], σn[δn], τ[δn], η, RSa[δn], RSV0)
-            end
-            if isnan(Vnew) || iter < 0
-              # @show (VL, VR, V[δn], Vnew, Tz[n], η, RSa[δn], RSV0)
-              println("V reject")
-              Vnew = 1e10
-              reject_step[1] = true
-              return
-              #error()
-            end
-            #=
-            =#
-            #=
-            if abs(Vnew) > 100
+            if fault_y[δn] <= -40
+              (e1, ~) = FToE[:, f]
+              (lf1, ~) = FToLF[:, f]
+              (~, ~, ~, ~, ~, ~, nx, ~, ~, ~, ~) = lop[e1]
+              for δn = FToδstarts[f]:(FToδstarts[f+1]-1)
+                V[δn] = sign(nx[lf1][1]) * Vp
+              end
+            else
+              τ[δn] .= τ[δn] .+ τz0[δn]
+              if isnan(τ[δn])
+                reject_step[1] = true
+                return
+              end
+              VR = abs(τ[δn] / η)
+              VL = -VR
+              (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ[δn], σn[δn],
+                                                             τ[δn], η, RSa[δn],
+                                                             RSV0),
+                                         VL, VR, 0.0; atolx=1e-9, rtolx=1e-9,
+                                         ftol=1e-9)
+              if show_val
+                show_val = false
+                @show (ψ[δn], σn[δn], τ[δn], η, RSa[δn], RSV0)
+              end
+              if isnan(Vnew) || iter < 0
+                # @show (VL, VR, V[δn], Vnew, Tz[n], η, RSa[δn], RSV0)
+                println("V reject")
+                Vnew = 1e10
+                reject_step[1] = true
+                return
+                #error()
+              end
+              #=
+              =#
+              #=
+              if abs(Vnew) > 100
               @show (Vnew, (VL, VR, V[δn], Tz[n], η, RSa[δn], RSV0))
-            end
-            =#
-            V[δn] = Vnew
+              end
+              =#
+              V[δn] = Vnew
 
-            dψ[δn] = (RSb * RSV0 / RSDc) * (exp((RSf0-ψ[δn]) / RSb) - abs(V[δn])
-                                            / RSV0)
-            if !isfinite(dψ[δn])
-              println("ψ reject")
-              dψ[δn] = 0
-              reject_step[1] = true
-              return
-            end
+              dψ[δn] = (RSb * RSV0 / RSDc) * (exp((RSf0-ψ[δn]) / RSb) - abs(V[δn])
+                                              / RSV0)
+              if !isfinite(dψ[δn])
+                println("ψ reject")
+                dψ[δn] = 0
+                reject_step[1] = true
+                return
+              end
 
+            end
           end
         elseif FToB[f] == VP_FAULT
           (e1, ~) = FToE[:, f]
@@ -445,7 +415,6 @@ let
     write(f, "\n")
   end
   cb = SavingCallback((ψδ, t, i) -> begin
-                        @show t
                         Vmax = 0.0
                         if isdefined(i, :fsallast)
                           dψV = i.fsallast

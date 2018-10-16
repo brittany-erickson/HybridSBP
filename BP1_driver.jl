@@ -34,7 +34,7 @@ let
   VP_FAULT = 8
   sim_years = 3000.
   year_seconds = 31556926.
-  SBPp   = 2 # SBP interior order
+  SBPp   = 4 # SBP interior order
 
   #=
   Lx = 80
@@ -79,13 +79,17 @@ let
 
   #=
   =#
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
+  mesh_name = "BP1_V2"
+  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/$(mesh_name).inp")
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 50
+  N1 = N0 = 100
   lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
+  base_name = "$(mesh_name)_p_$(SBPp)_lvl_$(lvl)"
+  @show base_name
+  @show (Lx, Ly)
 
+  #=
   r = verts[1,:]
   s = verts[2,:]
   x = @view verts[1,:]
@@ -93,7 +97,6 @@ let
   x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
   y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
   base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  #=
   =#
 
   #=
@@ -118,7 +121,6 @@ let
   EToN0[1, :] .= N0
   EToN0[2, :] .= N1
 
-  #=
   @plotting (p1, p2, p3) = (plot(), plot(), plot())
   @plotting let
     # Do some plotting
@@ -130,6 +132,7 @@ let
     end
     display(plot!(p1, aspect_ratio = 1))
   end
+  #=
   =#
 
   # Some sanity checks
@@ -534,7 +537,8 @@ let
                         Vmax
                       end, SavedValues(Float64, Float64))
   sol = solve(prob, Tsit5(); isoutofdomain=stepcheck, dt=1e3,
-              atol = 1e-10, rtol = 1e-10, save_everystep=false, callback=cb)
+              atol = 1e-7, rtol = 1e-7, save_everystep=false, callback=cb,
+              internalnorm=x->vecnorm(x, Inf))
   ψδ = sol.u[end]
   ψδ[δNp .+ (1:δNp)] = ψδ[δNp .+ (1:δNp)]
   δ = @view ψδ[δNp .+ (1:δNp)]

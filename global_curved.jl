@@ -220,7 +220,7 @@ end
 #}}}
 
 #{{{ locoperator
-function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 10)
+function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp

@@ -30,9 +30,9 @@ let
                             ("hamming_data/BP1_small_SBPp2_ptsc100_lvl1", "many block, Lx 36, ref 1, penalty 100"),
                             ("hamming_data/BP1_small_SBPp4_ptsc100_lvl1_Lx36", "SBP 4, many block, Lx 36, ref 1, penalty 100"),
                            )
-    =#
-    for (base_name, title) = (("compare_BP1_2block_SBPp2_ptsc12_lvl1_Lx36",
-                               "BP1 comparison"),)
+  =#
+  #=
+  for (base_name, title) = (("compare_BP1_2block_SBPp2_ptsc12_lvl1_Lx36", "BP1 comparison (psi)"),)
     @show (base_name, title)
     y = open("$(base_name)_slip.dat") do f
       node_data = split(readline(f))
@@ -61,6 +61,42 @@ let
       end
     end
     display(plot!(p1, ylims=(-36, 0), xlims=(0, 20), title=title))
+    savefig("$(base_name).pdf")
+  end
+  =#
+  for (base_name, title) = (
+                            ("compare_BP1_theta_2block_SBPp2_ptsc12_lvl1_Lx36", "BP1 comparison (theta)"),
+                            # ("compare_BP1_theta_DP5_2block_SBPp2_ptsc12_lvl1_Lx36", "BP1 comparison (theta) DP5"),
+                            ("compare_BP1_theta_norm_2block_SBPp2_ptsc12_lvl1_Lx36", "BP1 comparison (theta) norm"),
+                           )
+    @show (base_name, title)
+    y = open("$(base_name)_slip.dat") do f
+      node_data = split(readline(f))
+      Np = length(node_data) - 3
+      y = zeros(Np)
+      for d = 1:Np
+        y[d] = parse(Float64, node_data[d+3])
+      end
+      y
+    end
+    (tδ, header) = readdlm("$(base_name)_slip.dat"; header=true)
+
+    p1 = plot()
+    tlast = 0
+    for t = 3:size(tδ, 1)
+      if tδ[t, 1] - tδ[t-1, 1] > 0.01 * year_seconds
+        if tδ[t,1] - tlast > year_seconds
+          plot!(p1, tδ[t, 4:end], y, color=:blue, legend=:none)
+          tlast = tδ[t,1]
+        end
+      else
+        if tδ[t,1] - tlast > 1
+          plot!(p1, tδ[t, 4:end], y, color=:red, legend=:none)
+          tlast = tδ[t,1]
+        end
+      end
+    end
+    display(plot!(p1, ylims=(-36, 0), xlims=(0, 23), title=title))
     savefig("$(base_name).pdf")
   end
 end

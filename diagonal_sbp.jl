@@ -600,6 +600,7 @@ function variable_diagonal_sbp_D2(p, N, B::Array{Float64,1}; xc = (-1, 1))
 
   r = Compat.range(xc[1], stop=xc[2], length=N+1)
 
+
   (D, S0, SN, HI, H, M, r)
 end
 #}}}

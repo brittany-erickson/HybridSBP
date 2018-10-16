@@ -58,9 +58,9 @@ let
   N0 = 200
   N1 = 200
   @show (N0,N1)
-  lvl = 1 # Refinement
+  lvl = 2 # Refinement
   τscale = 12
-  base_name = "compare_BP1_2block_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx$(Lx)"
+  base_name = "compare_BP1_psi_norm_2block_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx$(Lx)"
 
   if typeof(verts) <: Tuple
     verts = flatten_tuples(verts)
@@ -479,7 +479,8 @@ let
                         Vmax
                       end, SavedValues(Float64, Float64))
   sol = solve(prob, Tsit5(); isoutofdomain=stepcheck, dt=1e3,
-              atol = 1e-10, rtol = 1e-10, save_everystep=false, callback=cb)
+              atol = 1e-10, rtol = 1e-10, save_everystep=false, callback=cb,
+              internalnorm=u->vecnorm(u, Inf))
   ψδ = sol.u[end]
   ψδ[δNp .+ (1:δNp)] = ψδ[δNp .+ (1:δNp)]
   δ = @view ψδ[δNp .+ (1:δNp)]

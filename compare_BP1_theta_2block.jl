@@ -34,73 +34,33 @@ let
   VP_FAULT = 8
   sim_years = 3000.
   year_seconds = 31556926.
-  SBPp   = 4 # SBP interior order
+  SBPp   = 2 # SBP interior order
 
-  Lx = 80
+  Ly = Lx = 36
   verts = ((-Lx,   0), (0,   0), (Lx,   0), # 1 2 3
-           (-Lx, -40), (0, -40), (Lx, -40), # 4 5 6
-           (-Lx, -80), (0, -80), (Lx, -80)) # 7 8 9
-  EToV = ((4, 5, 1, 2),
-          (5, 6, 2, 3),
-          (7, 8, 4, 5),
-          (8, 9, 5, 6))
+           (-Lx, -Ly), (0, -Ly), (Lx, -Ly)) # 4 5 6
+  EToV = ((5, 2, 4, 1),
+          (6, 3, 5, 2))
   EToF = ((1,  2,  3, 4),
-          (2,  5,  6, 7),
-          (8,  9, 10, 3),
-          (9, 11, 12, 6))
-  FToB = fill(BC_LOCKED_INTERFACE, (12,))
-  for f ∈ (1, 5, 8, 11)
+          (5,  6,  7, 3))
+  FToB = fill(BC_LOCKED_INTERFACE, (7,))
+  EToBlock = (1,2)
+  for f ∈ (4, 7)
     FToB[f] = BC_DIRICHLET
   end
-  for f ∈ (4, 7, 10, 12)
-    FToB[f] = BC_NEUMANN
-  end
-  for f ∈ (2,)
+  for f ∈ (3,)
+    FToB[f] = BC_JUMP_INTERFACE
     FToB[f] = RS_FAULT
   end
-  for f ∈ (9,)
-    FToB[f] = VP_FAULT
+  for f ∈ (1,2,5,6,)
+    FToB[f] = BC_NEUMANN
   end
-  N0 = 1600
-  N1 = 800
-  lvl = 1 # Refinement
-  base_name = "BP1_uniform"
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V1.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 13
-  lvl = 3 # Refinement
-  base_name = "BP1_mesh_$(lvl)"
-  base_name = "BP1_V1_$(lvl)"
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V0.inp")
-  Lx = maximum(verts[1,:])
-  Ly = maximum(abs.(verts[2,:]))
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V0_p_$(SBPp)_lvl_$(lvl)"
-
-  #=
-  r = verts[1,:]
-  s = verts[2,:]
-  x = @view verts[1,:]
-  y = @view verts[2,:]
-  x .= x .+ 3 * sin.(2 * π * s / Ly) .* sin.(2 * π * r / Lx)
-  y .= y .+ 3 * sin.(5*π * s / Ly) .* sin.(2 * π * r / Lx)
-  base_name = "BP1_V0_skew_p_$(SBPp)_lvl_$(lvl)"
-  =#
-  =#
-
-  #=
-  (verts, EToV, EToF, FToB) = read_inp_2d("meshes/BP1_V2.inp")
-  Lx = maximum(verts[1,:])
-  N1 = N0 = 50
-  lvl = 1 # Refinement
-  base_name = "BP1_V2_$(lvl)"
-  =#
+  N0 = 200
+  N1 = 200
+  @show (N0,N1)
+  lvl = 2 # Refinement
+  τscale = 12
+  base_name = "compare_BP1_theta_norm_2block_SBPp$(SBPp)_ptsc$(τscale)_lvl$(lvl)_Lx$(Lx)"
 
   if typeof(verts) <: Tuple
     verts = flatten_tuples(verts)
@@ -188,7 +148,8 @@ let
     yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
 
     # Build local operators
-    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+    lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]],
+                         τscale=τscale)
   end
   #}}}
 
@@ -197,7 +158,7 @@ let
 
   # Build the trace operators
   (FToλstarts, T, D) = gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS,
-                                 Nr, Ns)
+                                    Nr, Ns)
   λNp = FToλstarts[nfaces+1]-1
 
   # Get a unique array indexes for the face to jumps map
@@ -249,13 +210,13 @@ let
   RSamin = 0.010
   RSamax = 0.025
   RSb = 0.015
-  RSDc = 0.008
+  RSDc = 0.016
   RSf0 = 0.6
   RSV0 = 1e-6
   RSVinit = 1e-9
   RSa = zeros(δNp)
-  RSH1 = 15;
-  RSH2 = 18;
+  RSH1 = 12;
+  RSH2 = 15;
   fault_y = zeros(δNp)
   for f = 1:nfaces
     if FToB[f] ∈ (RS_FAULT, VP_FAULT)
@@ -274,9 +235,8 @@ let
                                exp.((RSf0 .+ RSb .* log.(RSV0 ./ RSVinit)) ./
                                     RSamax)) .+ η .* RSVinit
 
-  θ = (RSDc ./ RSV0) .* exp.((RSa ./ RSb) .* log.((2 .* RSV0 ./ RSVinit) .*
+  θ0 = (RSDc ./ RSV0) .* exp.((RSa ./ RSb) .* log.((2 .* RSV0 ./ RSVinit) .*
       sinh.((τz0 .- η .* RSVinit) ./ (RSa .* σn))) .- RSf0 ./ RSb)
-  ψ0 = RSf0 .+ RSb .* log.(RSV0 .* θ ./ RSDc)
 
   for f = 1:nfaces
     if FToB[f] == RS_FAULT
@@ -306,15 +266,15 @@ let
   τ = zeros(δNp)
   τp = zeros(δNp)
   τm = zeros(δNp)
-  odefun(dψV, ψδ, p, t) = begin
+  odefun(dθV, θδ, p, t) = begin
     begin
       if reject_step[1]
         return
       end
-      ψ  = @view ψδ[        (1:δNp) ]
-      δ  = @view ψδ[ δNp .+ (1:δNp) ]
-      dψ = @view dψV[       (1:δNp) ]
-      V  = @view dψV[δNp .+ (1:δNp) ]
+      θ  = @view θδ[        (1:δNp) ]
+      δ  = @view θδ[ δNp .+ (1:δNp) ]
+      dθ = @view dθV[       (1:δNp) ]
+      V  = @view dθV[δNp .+ (1:δNp) ]
       for e = 1:nelems
         locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
                     bc_Dirichlet, bc_Neumann, in_jump, (e, δ, t))
@@ -343,14 +303,22 @@ let
             end
             VR = abs(τ[δn] / η)
             VL = -VR
-            (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ[δn], σn[δn],
+            if θ[δn] <= 0
+              @show θ[δn]
+              println("θ reject")
+              Vnew = 1e10
+              reject_step[1] = true
+              return
+            end
+            ψ = RSf0 .+ RSb .* log.(RSV0 .* θ[δn] ./ RSDc)
+            (Vnew, ~, iter) = newtbndv((V) -> rateandstate(V, ψ, σn[δn],
                                                            τ[δn], η, RSa[δn],
                                                            RSV0),
                                        VL, VR, 0.0; atolx=1e-9, rtolx=1e-9,
                                        ftol=1e-9)
             if show_val
               show_val = false
-              @show (ψ[δn], σn[δn], τ[δn], η, RSa[δn], RSV0)
+              @show (θ[δn], ψ, σn[δn], τ[δn], η, RSa[δn], RSV0)
             end
             if isnan(Vnew) || iter < 0
               # @show (VL, VR, V[δn], Vnew, Tz[n], η, RSa[δn], RSV0)
@@ -369,11 +337,10 @@ let
             =#
             V[δn] = Vnew
 
-            dψ[δn] = (RSb * RSV0 / RSDc) * (exp((RSf0-ψ[δn]) / RSb) - abs(V[δn])
-                                            / RSV0)
-            if !isfinite(dψ[δn])
-              println("ψ reject")
-              dψ[δn] = 0
+            dθ[δn] =  1 - Vnew * θ[δn] / RSDc
+            if !isfinite(dθ[δn])
+              println("θ reject")
+              dθ[δn] = 0
               reject_step[1] = true
               return
             end
@@ -388,13 +355,13 @@ let
           end
         end
       end
-      # @show (t/year_seconds, extrema(V), extrema(abs.(δ)), extrema(abs.(ψ)), extrema(dψ))
+      # @show (t/year_seconds, extrema(V), extrema(abs.(δ)), extrema(abs.(θ)), extrema(dθ))
       V
     end
   end
-  ψδ = zeros(2 * δNp)
-  ψδ[1:δNp] .= ψ0
-  dψV = zeros(2 * δNp)
+  θδ = zeros(2 * δNp)
+  θδ[1:δNp] .= θ0
+  dθV = zeros(2 * δNp)
   #}}}
 
   #{{{ Setup station data
@@ -416,16 +383,16 @@ let
 
   tspan = (0, sim_years * year_seconds)
 
-  dψV = zeros(2 * δNp)
-  # @time odefun(dψV, ψδ, (), 1.0)
-  # @time odefun(dψV, ψδ, (), 1.0)
-  # @time odefun(dψV, ψδ, (), 1.0)
-  # @time odefun(dψV, ψδ, (), 1.0)
+  dθV = zeros(2 * δNp)
+  # @time odefun(dθV, θδ, (), 1.0)
+  # @time odefun(dθV, θδ, (), 1.0)
+  # @time odefun(dθV, θδ, (), 1.0)
+  # @time odefun(dθV, θδ, (), 1.0)
   # return
-  prob = ODEProblem(odefun, ψδ, tspan)
+  prob = ODEProblem(odefun, θδ, tspan)
   Vmin = 0.0
   δmax = -1
-  stepcheck(ψδ, p, t) = begin
+  stepcheck(θδ, p, t) = begin
     if reject_step[1]
       reject_step[1] = false
       println("reject")
@@ -438,30 +405,29 @@ let
   nxt_ind = 1
   fault_order = sortperm(fault_y)
   open("$(base_name)_slip.dat", "w") do f
-    write(f, "tsec                   tyear                  ")
+    write(f, "tsec                   tyear                  Vmax                   ")
     for k = 1:length(fault_order)
       @printf f "%+.16e " fault_y[fault_order[k]]
     end
     write(f, "\n")
   end
-  cb = SavingCallback((ψδ, t, i) -> begin
-                        @show t
+  cb = SavingCallback((θδ, t, i) -> begin
                         Vmax = 0.0
                         if isdefined(i, :fsallast)
-                          dψV = i.fsallast
-                          V  = @view dψV[δNp .+ (1:δNp) ]
+                          dθV = i.fsallast
+                          V  = @view dθV[δNp .+ (1:δNp) ]
                           Vmax = maximum(abs.(extrema(V)))
                           tnext = tlast + (Vmax > 1e-3 ? 0.1 : year_seconds)
                           if (t >= tnext)
-                            ψ  = @view ψδ[        (1:δNp) ]
-                            δ  = @view ψδ[ δNp .+ (1:δNp) ]
-                            dψ = @view dψV[       (1:δNp) ]
+                            θ  = @view θδ[        (1:δNp) ]
+                            δ  = @view θδ[ δNp .+ (1:δNp) ]
+                            dθ = @view dθV[       (1:δNp) ]
                             tlast = tnext
                             @show (t/year_seconds, Vmax)
                             @show base_name
                             station_t[nxt_ind] = t
                               open("$(base_name)_slip.dat", "a") do f
-                                @printf f "%.16e %.16e " t t/year_seconds
+                                @printf f "%.16e %.16e %.16e " t t/year_seconds Vmax
                                 for k = 1:length(fault_order)
                                   @printf f "%+.16e " δ[fault_order[k]]
                                 end
@@ -470,7 +436,7 @@ let
                             for s = 1:numstations
                               n = station_ind[s]
                               station_V[s, nxt_ind] = V[n]
-                              station_θ[s, nxt_ind] = RSDc * exp((ψ[n] - RSf0) / RSb) / RSV0
+                              station_θ[s, nxt_ind] = θ[n]
                               station_δ[s, nxt_ind] = δ[n]
                               station_τ[s, nxt_ind] = τ[n] - η * V[n]
                             end
@@ -490,7 +456,7 @@ let
                               len = 2 * old_len
                               old_station_V = station_V
                               old_station_τ = station_τ
-                              old_station_ψ = station_θ
+                              old_station_θ = station_θ
                               old_station_δ = station_δ
                               station_t = Array{Float64, 1}(undef, len)
                               station_V = Array{Float64, 2}(undef, numstations,  len)
@@ -500,7 +466,7 @@ let
                               station_t[1:old_len] .= old_station_t[1:old_len]
                               station_V[:, 1:old_len] .= old_station_V[:, 1:old_len]
                               station_τ[:, 1:old_len] .= old_station_τ[:, 1:old_len]
-                              station_θ[:, 1:old_len] .= old_station_ψ[:, 1:old_len]
+                              station_θ[:, 1:old_len] .= old_station_θ[:, 1:old_len]
                               station_δ[:, 1:old_len] .= old_station_δ[:, 1:old_len]
                             end
                             if t > tdump
@@ -519,11 +485,11 @@ let
                         Vmax
                       end, SavedValues(Float64, Float64))
   sol = solve(prob, Tsit5(); isoutofdomain=stepcheck, dt=1e3,
-              atol = 1e-6, rtol = 1e-6, save_everystep=false, callback=cb,
+              atol = 1e-10, rtol = 1e-10, save_everystep=false, callback=cb,
               internalnorm=u->vecnorm(u, Inf))
-  ψδ = sol.u[end]
-  ψδ[δNp .+ (1:δNp)] = ψδ[δNp .+ (1:δNp)]
-  δ = @view ψδ[δNp .+ (1:δNp)]
+  θδ = sol.u[end]
+  θδ[δNp .+ (1:δNp)] = θδ[δNp .+ (1:δNp)]
+  δ = @view θδ[δNp .+ (1:δNp)]
 
   for s = 1:numstations
     open("$(base_name)_$(stations[s]).dat", "w") do f
@@ -534,42 +500,5 @@ let
     end
   end
 
-  #=
-  dψV = zeros(2 * δNp)
-  odefun(dψV, ψδ, (), tspan[end])
-  V = @view dψV[δNp .+ (1:δNp)]
-  @show extrema(V)
-  @show extrema(δ)
-
-  @plotting let
-    #=
-    mx = 0.0
-    mn = 0.0
-    for e = 1:nelems
-      (x, y) = lop[e][4]
-      Δu = u[vstarts[e]:(vstarts[e+1]-1)] - ulinear(x,y)
-      mn = min(mn, minimum(Δu))
-      mx = max(mx, maximum(Δu))
-    end
-    =#
-    mx = maximum(abs.(δ))
-    clims = (-mx, mx)
-    p2 = plot()
-    for e = 1:nelems
-      (x, y) = lop[e][4]
-      Δu = u[vstarts[e]:(vstarts[e+1]-1)] # - ulinear(x,y,tspan[end])
-      # Δu = u[vstarts[e]:(vstarts[e+1]-1)]
-      plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
-            reshape(y, Nr[e]+1, Ns[e]+1),
-            reshape(Δu, Nr[e]+1, Ns[e]+1),
-            st = :surface, c = :balance, clims = clims)
-    end
-    plot!(p2, aspect_ratio = 1, camera = (15, 26))
-    # plot!(p2, aspect_ratio = 1)
-    # plot!(p2, aspect_ratio = 1, camera = (45, 45))
-
-    display(plot(p1, p2, layout = (2,1), size = (1400, 800)))
-  end
-  =#
   nothing
 end
