@@ -1,9 +1,4 @@
 do_plotting = true
-if VERSION < v"0.6.999999"
-  macro isdefined(s::Symbol)
-    return isdefined(s)
-  end
-end
 if !@isdefined mtime_global_curved
   mtime_global_curved = 0
 end
@@ -12,25 +7,12 @@ if mtime_global_curved < mtime("global_curved.jl")
   include("global_curved.jl")
   mtime_global_curved = mtime("global_curved.jl")
 end
-if VERSION < v"0.6.999999"
-  macro isdefined(s::Symbol)
-    return isdefined(s)
-  end
-end
-if !@isdefined mtime_global_curved
-  mtime_global_curved = 0
-end
-if VERSION <= v"0.6.999999"
-  ldiv! = A_ldiv_B!
-  cholesky = cholfact
-  using CholmodSolve2
-end
 
 let
   RS_FAULT = 7
   VP_FAULT = 8
 
-  SBPp   = 4 # SBP interior order
+  SBPp   = 6 # SBP interior order
 
   (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower_v2.inp")
 
@@ -58,7 +40,7 @@ let
     EToV  = flatten_tuples(EToV)
     EToF  = flatten_tuples(EToF)
   end
-  N1 = N0 = 13
+  N1 = N0 = 16
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
   @show (Lx, Ly)

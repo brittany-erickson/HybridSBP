@@ -1,12 +1,6 @@
-if VERSION <= v"0.6.999999"
-  eigen = eig
-  macro isdefined(s::Symbol)
-    return isdefined(s)
-  end
-  (!isdefined(:do_plotting)) && (do_plotting = true)
-  mul! = A_mul_B!
-  cholesky = cholfact
-end
+using SparseArrays
+using LinearAlgebra
+
 if do_plotting
   macro plotting(ex)
     return :($(esc(ex)))
@@ -23,10 +17,6 @@ end
 
 include("diagonal_sbp.jl")
 
-using Compat
-import Compat: range, undef, split
-using Compat.SparseArrays
-
 # flatten tuples to arrays
 if !@isdefined flatten_tuples
   const flatten_tuples = (x) -> reshape(collect(Iterators.flatten(x)),
@@ -41,99 +31,6 @@ const BC_DIRICHLET        = 1
 const BC_NEUMANN          = 2
 const BC_LOCKED_INTERFACE = 0
 const BC_JUMP_INTERFACE   = 7
-
-if VERSION >= v"0.6.999999"
-  # Transpose type bwdsub
-  function bwdsub!(x, AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
-                                Adjoint{T,SparseMatrixCSC{T,Int64}}},
-                   b) where T <: Real
-    copy!(x, b)
-    bwdsub!(AT, x)
-  end
-  function bwdsub!(AT::Union{Transpose{T,SparseMatrixCSC{T,Int64}},
-                             Adjoint{T,SparseMatrixCSC{T,Int64}}},
-                   b) where T <: Real
-    nzval = AT.parent.nzval
-    colval = AT.parent.rowval
-    rowptr = AT.parent.colptr
-
-    for i = length(b):-1:1
-      jstart = rowptr[i]
-      jend   = rowptr[i + 1] - 1
-
-      # lopp through the row and subtract off pieces
-      j = jend
-      while j > jstart
-        if colval[j] > i
-          b[i] -= b[colval[j]]*nzval[j]
-          j -= 1
-        else
-          break
-        end
-      end
-      @assert colval[j] == i
-      b[i] = b[i]/nzval[j]
-    end
-    b
-  end
-end
-
-function bwdsub!(x, A::SparseMatrixCSC, b)
-  copy!(x, b)
-  bwdsub!(A, x)
-end
-function bwdsub!(A::SparseMatrixCSC, b)
-  nzval = A.nzval
-  rowval = A.rowval
-  colptr = A.colptr
-
-  for j = length(b):-1:1
-    istart = colptr[j]
-    iend   = colptr[j + 1] - 1
-    while istart <= iend && rowval[iend] > j
-      iend -= 1
-    end
-
-    @assert rowval[iend] == j
-
-    b[j] = bj = b[j]/nzval[iend]
-
-    # update remaining part
-    for i = istart:iend-1
-      b[rowval[i]] -= bj*nzval[i]
-    end
-  end
-  b
-end
-
-function fwdsub!(x, A::SparseMatrixCSC, b)
-  copy!(x, b)
-  fwdsub!(A, x)
-end
-function fwdsub!(A::SparseMatrixCSC, b)
-  nzval = A.nzval
-  rowval = A.rowval
-  colptr = A.colptr
-
-  for j = 1:length(b)
-    istart = colptr[j]
-    iend   = colptr[j + 1] - 1
-    while istart <= iend && rowval[istart] < j
-      istart += 1
-    end
-
-    @assert rowval[istart] == j
-
-    b[j] = bj = b[j]/nzval[istart]
-
-    # update remaining part
-    for i = istart+1:iend
-      b[rowval[i]] -= bj*nzval[i]
-    end
-  end
-  b
-end
-
 
 #{{{ Transfinite Blend
 function transfinite_blend(α1, α2, α3, α4, r, s)
