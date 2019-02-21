@@ -181,7 +181,6 @@ let
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] = vex(xf, yf, e2) - vex(xf, yf, e1)
       end
     end
-    @show δ
 
     bc_Dirichlet = (lf, x, y, e, δ) -> vex(x, y, e)
     bc_Neumann   = (lf, x, y, nx, ny, e, δ) -> (nx .* vex_x(x, y, e)
