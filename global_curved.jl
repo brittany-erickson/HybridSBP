@@ -779,7 +779,7 @@ end
 #}}}
 
 # {{{ Constructor for inp files
-function read_inp_2d(T, S, filename::String)
+function read_inp_2d(T, S, filename::String; bc_map=1:10000)
   # {{{ Read in the file
   f = try
     open(filename)
@@ -897,6 +897,7 @@ function read_inp_2d(T, S, filename::String)
     catch
       error("cannot parse line $linenum: \"$(lines[linenum])\" ")
     end
+    bc = bc_map[bc]
     face = inp_to_zorder[face]
     for l = linenum+1:length(lines)
       if !occursin(r"^\s*[0-9]+", lines[l])
@@ -923,7 +924,7 @@ function read_inp_2d(T, S, filename::String)
 
   ([Vx Vy]', EToV, EToF, FToB, EToBlock)
 end
-read_inp_2d(filename) = read_inp_2d(Int64, Float64, filename)
+read_inp_2d(filename;kw...) = read_inp_2d(Int64, Float64, filename;kw...)
 
 function SeekToSubstring(lines, substring; first=1)
   for l = first:length(lines)
