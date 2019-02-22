@@ -69,8 +69,24 @@ let
       error("invalid block")
     end
   end
-  vex_x = (x,y,e) -> -kx * sin.(kx * x) .* cosh.(ky * y)
-  vex_y = (x,y,e) ->  ky * cos.(kx * x) .* sinh.(ky * y)
+  vex_x(x,y,e) = begin
+    if EToBlock[e] == 1
+      return -kx * sin.(kx * x) .* cosh.(ky * y)
+    elseif EToBlock[e] == 2
+      return -kx * sin.(kx * x) .* cosh.(ky * y)
+    else
+      error("invalid block")
+    end
+  end
+  vex_y(x,y,e) = begin
+    if EToBlock[e] == 1
+      return ky * cos.(kx * x) .* sinh.(ky * y)
+    elseif EToBlock[e] == 2
+      return ky * cos.(kx * x) .* sinh.(ky * y)
+    else
+      error("invalid block")
+    end
+  end
 
   ϵ = zeros(4)
   for lvl = 1:length(ϵ)
