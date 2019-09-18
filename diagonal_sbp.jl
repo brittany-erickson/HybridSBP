@@ -456,13 +456,13 @@ end
 #{{{
 function variable_diagonal_sbp_D2(p, N, B; xc = (-1, 1))
   r = range(xc[1], stop=xc[2], length=N+1)
-  variable_diagonal_sbp_D2(p, N, B(collect(r));xc=xc)
+  variable_diagonal_sbp_D2(p, N, B(collect(r)); xc=xc)
 end
 function variable_diagonal_sbp_D2(p, N, B::T; xc = (-1, 1)) where T <: Number
   variable_diagonal_sbp_D2(p, N, B*ones(N+1);xc=xc)
 end
 
-function variable_diagonal_sbp_D2(p, N, B::Array{Float64,1}; xc = (-1, 1))
+function variable_diagonal_sbp_D2(p, N, B::AbstractArray; xc = (-1, 1))
   @assert length(B) == N+1
 
   if p == 2
