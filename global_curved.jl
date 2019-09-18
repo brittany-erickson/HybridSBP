@@ -115,8 +115,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   Nsp = Ns + 1
   Np = Nrp * Nsp
 
-  (DrM, ~, ~, ~) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
-  (DsM, ~, ~, ~) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
+  (DrM, _, _, _) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
+  (DsM, _, _, _) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
 
   (Dr, HrI, Hr, r) = diagonal_sbp_D1(p, Nr; xc = (-1,1))
   (Ds, HsI, Hs, s) = diagonal_sbp_D1(p, Ns; xc = (-1,1))
@@ -157,7 +157,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   JSrN = Array{Int64,1}(undef,0)
   VSrN = Array{Float64,1}(undef,0)
 
-  (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Nr, rand(Nrp))
+  (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Nr, rand(Nrp))
   IArr = Array{Int64,1}(undef,Nsp * length(Ae.nzval))
   JArr = Array{Int64,1}(undef,Nsp * length(Ae.nzval))
   VArr = Array{Float64,1}(undef,Nsp * length(Ae.nzval))
@@ -174,7 +174,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   stSrN = 0
   for j = 1:Nsp
     rng = (j-1) * Nrp .+ (1:Nrp)
-    (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Nr, crr[rng])
+    (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Nr, crr[rng])
     (Ie, Je, Ve) = findnz(Ae)
     IArr[stArr .+ (1:length(Ve))] = Ie .+ (j-1) * Nrp
     JArr[stArr .+ (1:length(Ve))] = Je .+ (j-1) * Nrp
@@ -199,7 +199,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   Sr0T = sparse(JSr0[1:stSr0], ISr0[1:stSr0], VSr0[1:stSr0], Np, Np)
   SrNT = sparse(JSrN[1:stSrN], ISrN[1:stSrN], VSrN[1:stSrN], Np, Np)
   # @assert Arr ≈ Arr'
-  (D2, S0, SN, ~, ~, ~) = diagonal_sbp_D2(p, Nr)
+  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Nr)
   #= affine mesh test
   Ar = SN - S0 - Hr * D2
   @assert Arr ≈ Hs ⊗ Ar
@@ -207,7 +207,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   # @assert Sr0 ≈ ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ S0)
   # @assert SrN ≈ ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ SN)
 
-  (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Ns, rand(Nsp))
+  (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Ns, rand(Nsp))
   IAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
   JAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
   VAss = Array{Float64,1}(undef,Nrp * length(Ae.nzval))
@@ -224,7 +224,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   stSsN = 0
   for i = 1:Nrp
     rng = i .+ Nrp * (0:Ns)
-    (~, S0e, SNe, ~, ~, Ae, ~) = variable_diagonal_sbp_D2(p, Ns, css[rng])
+    (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Ns, css[rng])
 
     (Ie, Je, Ve) = findnz(Ae)
     IAss[stAss .+ (1:length(Ve))] = i .+ Nrp * (Ie .- 1)
@@ -250,7 +250,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   Ss0T = sparse(JSs0[1:stSs0], ISs0[1:stSs0], VSs0[1:stSs0], Np, Np)
   SsNT = sparse(JSsN[1:stSsN], ISsN[1:stSsN], VSsN[1:stSsN], Np, Np)
   # @assert Ass ≈ Ass'
-  (D2, S0, SN, ~, ~, ~) = diagonal_sbp_D2(p, Ns)
+  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Ns)
   #= affine mesh test
   As = SN - S0 - Hs * D2
   @assert Ass ≈ As ⊗ Hr
@@ -520,7 +520,7 @@ end
 #{{{ volbcarray()
 function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
-  (~, F, L, (x, y), ~, sJ, nx, ny, ~, ~, τ) = lop
+  (_, F, L, (x, y), _, sJ, nx, ny, _, _, τ) = lop
   ge[:] .= 0
   for lf = 1:4
     (xf, yf) = (L[lf] * x, L[lf] * y)
@@ -955,12 +955,12 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
   if isempty(EToO)
-    (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
+    (_, F, _, _, _, sJ, nx, _, _, HfI, τ) = lop[e1]
     vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
     vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
     return τ[lf1] * (vλ .- δ/2) - vol
   else
-    (~, F, ~, ~, ~, sJ, ~, ~, ~, HfI, τ) = lop[e2]
+    (_, F, _, _, _, sJ, _, _, _, HfI, τ) = lop[e2]
     vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
     vol = (HfI[lf2] * (F[lf2] * vu)) ./ (sJ[lf2])
     if !EToO[lf2,e2]
@@ -975,12 +975,12 @@ function computeTz1(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
   if isempty(EToO)
-    (~, F, L, ~, ~, sJ, nx, ~, ~, HfI, τ, G) = lop[e1]
+    (_, F, L, _, _, sJ, nx, _, _, HfI, τ, G) = lop[e1]
     vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
     vol = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
     return -(vol + τ[lf1] * (L[lf1] * vu - (vλ .- δ/2)))
   else
-    (~, F, L, ~, ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+    (_, F, L, _, _, sJ, _, _, _, HfI, τ, G) = lop[e2]
     vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
     vol = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
     uf = L[lf2] * vu
@@ -998,12 +998,12 @@ function computeTz2(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
   (lf1, lf2) = FToLF[:, f]
 
   if isempty(EToO)
-    (~, ~, ~, ~, ~, sJ, nx, ~, ~, HfI, τ, G) = lop[e1]
+    (_, _, _, _, _, sJ, nx, _, _, HfI, τ, G) = lop[e1]
     vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
     vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
     return -vol1
   else
-    (~, ~, ~, ~, ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+    (_, _, _, _, _, sJ, _, _, _, HfI, τ, G) = lop[e2]
     vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
     vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
     if !EToO[lf2,e2]
@@ -1017,11 +1017,11 @@ function computeTz3(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
 
-  (~, ~, L1, (x1,y1), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e1]
+  (_, _, L1, (x1,y1), _, sJ, _, _, _, HfI, τ, G) = lop[e1]
   vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
   vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
 
-  (~, ~, L2, (x2,y2), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+  (_, _, L2, (x2,y2), _, sJ, _, _, _, HfI, τ, G) = lop[e2]
   vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
   vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
   # (xf1, yf1) = (L1[lf1] * x1, L1[lf1] * y1)
@@ -1053,7 +1053,7 @@ function computeTz(f, λ, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO = ();
   vλ = @view λ[FToλstarts[f]:(FToλstarts[f+1]-1)]
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
-  (~, F, ~, ~, ~, sJ, nx, ~, ~, HfI, τ) = lop[e1]
+  (_, F, _, _, _, sJ, nx, _, _, HfI, τ) = lop[e1]
   vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
   vol = (HfI[lf1] * (F[lf1] * vu)) ./ (sJ[lf1])
   return τ[lf1] * (vλ .- δ/2) - vol
@@ -1063,11 +1063,11 @@ function computeTz5(f, FToλstarts, u, vstarts, lop, FToE, FToLF, EToO)
   (e1, e2) = FToE[:, f]
   (lf1, lf2) = FToLF[:, f]
 
-  (~, ~, L1, (x1,y1), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e1]
+  (_, _, L1, (x1,y1), _, sJ, _, _, _, HfI, τ, G) = lop[e1]
   vu = @view u[vstarts[e1]:(vstarts[e1+1]-1)]
   vol1 = (HfI[lf1] * (G[lf1] * vu)) ./ (sJ[lf1])
 
-  (~, ~, L2, (x2,y2), ~, sJ, ~, ~, ~, HfI, τ, G) = lop[e2]
+  (_, _, L2, (x2,y2), _, sJ, _, _, _, HfI, τ, G) = lop[e2]
   vu = @view u[vstarts[e2]:(vstarts[e2+1]-1)]
   vol2 = (HfI[lf2] * (G[lf2] * vu)) ./ (sJ[lf2])
   if !EToO[lf2,e2]
@@ -1090,8 +1090,8 @@ end
 
 function newtbndv(func, xL, xR, x; ftol = 1e-6, maxiter = 500, minchange=0,
                   atolx = 1e-4, rtolx = 1e-4)
-  (fL, ~) = func(xL)
-  (fR, ~) = func(xR)
+  (fL, _) = func(xL)
+  (fR, _) = func(xR)
   if fL .* fR > 0
     return (typeof(x)(NaN), typeof(x)(NaN), -maxiter)
   end
