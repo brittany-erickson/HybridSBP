@@ -1,12 +1,5 @@
 do_plotting = true
-if !@isdefined mtime_global_curved
-  mtime_global_curved = 0
-end
-if mtime_global_curved < mtime("global_curved.jl")
-  println("including global_curved")
-  include("global_curved.jl")
-  mtime_global_curved = mtime("global_curved.jl")
-end
+include("global_curved.jl")
 
 let
   RS_FAULT = 7

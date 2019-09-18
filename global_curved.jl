@@ -18,14 +18,10 @@ end
 include("diagonal_sbp.jl")
 
 # flatten tuples to arrays
-if !@isdefined flatten_tuples
-  const flatten_tuples = (x) -> reshape(collect(Iterators.flatten(x)),
-                                        length(x[1]), length(x))
-end
+flatten_tuples(x) = reshape(collect(Iterators.flatten(x)), length(x[1]),
+                            length(x))
 
-if !@isdefined ⊗
-  const ⊗ = (A,B) -> kron(A, B)
-end
+⊗(A,B) = kron(A, B)
 
 const BC_DIRICHLET        = 1
 const BC_NEUMANN          = 2
@@ -632,32 +628,18 @@ end
 #}}}
 
 #{{{
-if !@isdefined SBPLocalOperator1
-  struct SBPLocalOperator1{T<:Real, S<:Factorization}
-    offset::Array{Int64,1}
-    H::Array{T,1}
-    X::Array{T,1}
-    Y::Array{T,1}
-    E::Array{Int64,1}
-    F::Array{S,1}
-    SBPLocalOperator1{T,S}(vstarts::Array{Int64,1}, H::Array{T,1}, X::Array{T,1},
+struct SBPLocalOperator1{T<:Real, S<:Factorization}
+  offset::Array{Int64,1}
+  H::Array{T,1}
+  X::Array{T,1}
+  Y::Array{T,1}
+  E::Array{Int64,1}
+  F::Array{S,1}
+  SBPLocalOperator1{T,S}(vstarts::Array{Int64,1}, H::Array{T,1}, X::Array{T,1},
                          Y::Array{T,1}, E::Array{Int64,1},
                          F::Array{S,1}) where {T<:Real, S<:Factorization} =
-      new(vstarts, H, X, Y, E, F)
-  end
+  new(vstarts, H, X, Y, E, F)
 end
-#=
-if !@isdefined GloToLoc
-  struct GloToLoc{S<:AbstractMatrix}
-    T::Array{S,1}
-    vstarts::Array{Int64,1}
-    FToλstarts::Array{Int64,1}
-    GloToLoc{S}(T::Array{S,1}, vstarts::Array{Int64,1},
-                FToλstarts::Array{Int64,1}) where {S<:AbstractMatrix} =
-       new(T, vstarts, FToλstarts)
-  end
-end
-=#
 
 function SBPLocalOperator1(lop, Nr, Ns, factorization)
   nelems = length(lop)
