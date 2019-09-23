@@ -154,10 +154,9 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   crr = J .* (rx .* rx + ry .* ry)
   crs = csr = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
+  ψmin = (crr + css - sqrt.((crr - css).^2 + 4crs.^2)) / 2
 
-  #
-  # Set up the rr derivative matrix
-  #
+  #{{{ Set up the rr derivative matrix
   ISr0 = Array{Int64,1}(undef,0)
   JSr0 = Array{Int64,1}(undef,0)
   VSr0 = Array{Float64,1}(undef,0)
@@ -201,23 +200,22 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
     VSrN[stSrN .+ (1:length(Ve))] =  Hs[j,j] * Ve
     stSrN += length(Ve)
   end
-  Arr = sparse(IArr[1:stArr], JArr[1:stArr], VArr[1:stArr], Np, Np)
+  Ãrr = sparse(IArr[1:stArr], JArr[1:stArr], VArr[1:stArr], Np, Np)
   Sr0 = sparse(ISr0[1:stSr0], JSr0[1:stSr0], VSr0[1:stSr0], Np, Np)
   SrN = sparse(ISrN[1:stSrN], JSrN[1:stSrN], VSrN[1:stSrN], Np, Np)
   Sr0T = sparse(JSr0[1:stSr0], ISr0[1:stSr0], VSr0[1:stSr0], Np, Np)
   SrNT = sparse(JSrN[1:stSrN], ISrN[1:stSrN], VSrN[1:stSrN], Np, Np)
-  # @assert Arr ≈ Arr'
-  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Nr)
   #= affine mesh test
+  # @assert Ãrr ≈ Ãrr'
+  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Nr)
   Ar = SN - S0 - Hr * D2
-  @assert Arr ≈ Hs ⊗ Ar
+  @assert Ãrr ≈ Hs ⊗ Ar
   =#
   # @assert Sr0 ≈ ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ S0)
   # @assert SrN ≈ ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ SN)
+  #}}}
 
-  #
-  # Set up the ss derivative matrix
-  #
+  #{{{ Set up the ss derivative matrix
   (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Ns, rand(Nsp))
   IAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
   JAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
@@ -255,27 +253,27 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
     VSsN[stSsN .+ (1:length(Ve))] = Hr[i,i] * Ve
     stSsN += length(Ve)
   end
-  Ass = sparse(IAss[1:stAss], JAss[1:stAss], VAss[1:stAss], Np, Np)
+  Ãss = sparse(IAss[1:stAss], JAss[1:stAss], VAss[1:stAss], Np, Np)
   Ss0 = sparse(ISs0[1:stSs0], JSs0[1:stSs0], VSs0[1:stSs0], Np, Np)
   SsN = sparse(ISsN[1:stSsN], JSsN[1:stSsN], VSsN[1:stSsN], Np, Np)
   Ss0T = sparse(JSs0[1:stSs0], ISs0[1:stSs0], VSs0[1:stSs0], Np, Np)
   SsNT = sparse(JSsN[1:stSsN], ISsN[1:stSsN], VSsN[1:stSsN], Np, Np)
-  # @assert Ass ≈ Ass'
-  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Ns)
+  # @assert Ãss ≈ Ãss'
   #= affine mesh test
+  (D2, S0, SN, _, _, _) = diagonal_sbp_D2(p, Ns)
   As = SN - S0 - Hs * D2
-  @assert Ass ≈ As ⊗ Hr
+  @assert Ãss ≈ As ⊗ Hr
   =#
   # @assert Ss0 ≈ (S0 ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
   # @assert SsN ≈ (SN ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
+  #}}}
 
-  #
-  # Set up the sr and rs derivative matrices
-  #
-  Asr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
-  Ars = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
+  #{{{ Set up the sr and rs derivative matrices
+  Ãsr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
+  Ãrs = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
+  #}}}
 
-  A = Arr + Ass + Ars + Asr
+  Ã = Ãrr + Ãss + Ãrs + Ãsr
 
   #
   # Boundary point matrices
@@ -309,7 +307,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   nx1 = -L1 * ys
   ny1 =  L1 * xs
   sJ1 = hypot.(nx1, ny1)
-  SJ1 = Diagonal(sJ1)
   nx1 = nx1 ./ sJ1
   ny1 = ny1 ./ sJ1
   H1 = Hs
@@ -318,7 +315,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   nx2 =  L2 * ys
   ny2 = -L2 * xs
   sJ2 = hypot.(nx2, ny2)
-  SJ2 = Diagonal(sJ2)
   nx2 = nx2 ./ sJ2
   ny2 = ny2 ./ sJ2
   H2 = Hs
@@ -327,7 +323,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   nx3 =  L3 * yr
   ny3 = -L3 * xr
   sJ3 = hypot.(nx3, ny3)
-  SJ3 = Diagonal(sJ3)
   nx3 = nx3 ./ sJ3
   ny3 = ny3 ./ sJ3
   H3 = Hr
@@ -336,7 +331,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   nx4 = -L4 * yr
   ny4 =  L4 * xr
   sJ4 = hypot.(nx4, ny4)
-  SJ4 = Diagonal(sJ4)
   nx4 = nx4 ./ sJ4
   ny4 = ny4 ./ sJ4
   H4 = Hr
@@ -345,43 +339,42 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   #
   # Penalty terms
   #
-  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ1))
-  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ2))
-  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ3))
-  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ4))
+  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Ns/2)
+  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Ns/2)
+  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nr/2)
+  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nr/2)
 
-  B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
-  B2 = -(SrN + SrNT) - ((csrN * Qs + QsT * csrN) ⊗ ErN) + ((τ2 * H2 * SJ2) ⊗ ErN)
-  B3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3 * SJ3))
-  B4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4 * SJ4))
+  C̃1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1) ⊗ Er0)
+  C̃2 = -(SrN + SrNT) - ((csrN * Qs + QsT * csrN) ⊗ ErN) + ((τ2 * H2) ⊗ ErN)
+  C̃3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3))
+  C̃4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4))
 
-  F1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T) + ((τ1 * H1 * SJ1) ⊗ er0T)
-  F2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT) + ((τ2 * H2 * SJ2) ⊗ erNT)
-  F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3 * SJ3))
-  F4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr)) + (esNT ⊗ (τ4 * H4 * SJ4))
+  F1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T) + ((τ1 * H1) ⊗ er0T)
+  F2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT) + ((τ2 * H2) ⊗ erNT)
+  F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3))
+  F4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr)) + (esNT ⊗ (τ4 * H4))
 
   G1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T)
   G2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT)
   G3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr))
   G4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr))
 
-  # @assert B1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1 * SJ1) ⊗ Er0)
-  # @assert B2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2 * SJ2) ⊗ ErN)
-  # @assert B3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3 * SJ3))
-  # @assert B4 ≈ F4' * L4 + L4' * F4 - (EsN ⊗ (τ4 * H4 * SJ4))
+  # @assert C̃1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1) ⊗ Er0)
+  # @assert C̃2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2) ⊗ ErN)
+  # @assert C̃3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3))
+  # @assert C̃4 ≈ F4' * L4 + L4' * F4 - (EsN ⊗ (τ4 * H4))
 
-  M = A + B1 + B2 + B3 + B4
+  M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
   # Modify the operator to handle the boundary conditions
   if !isempty(LFToB)
     F = (F1, F2, F3, F4)
     τ = (τ1, τ2, τ3, τ4)
-    sJ = (sJ1, sJ2, sJ3, sJ4)
     HfI = (H1I, H2I, H3I, H4I)
     # Modify operators for the BC
     for lf = 1:4
       if LFToB[lf] == BC_NEUMANN
-        M -= F[lf]' * (Diagonal(1 ./ (sJ[lf] .* diag(τ[lf]))) * HfI[lf]) * F[lf]
+        M̃ -= F[lf]' * (Diagonal(1 ./ (diag(τ[lf]))) * HfI[lf]) * F[lf]
       elseif !(LFToB[lf] == BC_DIRICHLET ||
                LFToB[lf] == BC_LOCKED_INTERFACE ||
                LFToB[lf] >= BC_JUMP_INTERFACE)
@@ -390,10 +383,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
     end
   end
 
-  # (E, V) = eigen(Matrix(M))
+  # (E, V) = eigen(Matrix(M̃))
   # println((minimum(E), maximum(E)))
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
-  (M, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), JH,
+  (M̃, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), JH,
    (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
    (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4), (G1, G2, G3, G4))
 end
@@ -515,10 +508,9 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
     JT = [JT; Je .+ (vstarts[ep] - 1)]
     VT = [VT; Ve]
 
-    sJf = lop[em][6][fm]
     Hf = Vector(diag(lop[em][9][fm]))
     τf = Vector(diag(lop[em][11][fm]))
-    VD = [VD; 2 * sJf .* Hf .* τf]
+    VD = [VD; 2 * Hf .* τf]
 
   end
   λNp = FToλstarts[nfaces+1]-1
@@ -539,7 +531,7 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     if LFToB[lf] == BC_DIRICHLET
       vf = bc_Dirichlet(lf, xf, yf, bcargs...)
     elseif LFToB[lf] == BC_NEUMANN
-      vf = bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...) ./ diag(τ[lf])
+      vf = sJ[lf] .* bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...) ./ diag(τ[lf])
     elseif LFToB[lf] == BC_LOCKED_INTERFACE
       continue # nothing to do here
     elseif LFToB[lf] >= BC_JUMP_INTERFACE
