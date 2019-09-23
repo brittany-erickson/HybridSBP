@@ -1,4 +1,4 @@
-do_plotting = true
+do_plotting = false
 if !@isdefined mtime_global_curved
   mtime_global_curved = 0
 end
@@ -233,14 +233,17 @@ let
       end
     end
     LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
+    #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
     u[:] = T' * λ
     u[:] .= g .+ u
 
-    p1 = plot()
-    p2 = plot()
-    p3 = plot()
+    @plotting begin
+      p1 = plot()
+      p2 = plot()
+      p3 = plot()
+    end
     for e = 1:nelems
       F = locfactors[e]
       (~, ~, ~, (x, y), JH, ~, ~, ~, ~, ~, ~, ~) = lop[e]
