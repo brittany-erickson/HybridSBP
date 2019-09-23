@@ -115,20 +115,24 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   Nsp = Ns + 1
   Np = Nrp * Nsp
 
+  # Derivative operators for the metric terms
   (DrM, _, _, _) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
   (DsM, _, _, _) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
 
+  # Derivative operators for the rest of the computation
   (Dr, HrI, Hr, r) = diagonal_sbp_D1(p, Nr; xc = (-1,1))
-  (Ds, HsI, Hs, s) = diagonal_sbp_D1(p, Ns; xc = (-1,1))
-
-  Ir = sparse(1.0I, Nrp, Nrp)
-  Is = sparse(1.0I, Nsp, Nsp)
-
   Qr = Hr * Dr
   QrT = sparse(transpose(Qr))
+
+  (Ds, HsI, Hs, s) = diagonal_sbp_D1(p, Ns; xc = (-1,1))
   Qs = Hs * Ds
   QsT = sparse(transpose(Qs))
 
+  # Identity matrices for the comuptation
+  Ir = sparse(I, Nrp, Nrp)
+  Is = sparse(I, Nsp, Nsp)
+
+  # Create the mesh
   (r, s) = (ones(Nsp) ⊗ r, s ⊗ ones(Nrp))
   (x, y) = (xf(r, s), yf(r, s))
 
@@ -146,10 +150,14 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   ry = -xs ./ J
   sy =  xr ./ J
 
+  # variable coefficient matrix components
   crr = J .* (rx .* rx + ry .* ry)
   crs = csr = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
 
+  #
+  # Set up the rr derivative matrix
+  #
   ISr0 = Array{Int64,1}(undef,0)
   JSr0 = Array{Int64,1}(undef,0)
   VSr0 = Array{Float64,1}(undef,0)
@@ -207,6 +215,9 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   # @assert Sr0 ≈ ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ S0)
   # @assert SrN ≈ ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ SN)
 
+  #
+  # Set up the ss derivative matrix
+  #
   (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Ns, rand(Nsp))
   IAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
   JAss = Array{Int64,1}(undef,Nrp * length(Ae.nzval))
@@ -258,15 +269,31 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   # @assert Ss0 ≈ (S0 ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
   # @assert SsN ≈ (SN ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
 
+  #
+  # Set up the sr and rs derivative matrices
+  #
   Asr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
   Ars = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
 
   A = Arr + Ass + Ars + Asr
 
+  #
+  # Boundary point matrices
+  #
   Er0 = sparse([1], [1], [1], Nrp, Nrp)
   ErN = sparse([Nrp], [Nrp], [1], Nrp, Nrp)
   Es0 = sparse([1], [1], [1], Nsp, Nsp)
   EsN = sparse([Nsp], [Nsp], [1], Nsp, Nsp)
+
+  er0T = sparse([1], [1  ], [1], 1, Nrp)
+  erNT = sparse([1], [Nrp], [1], 1, Nrp)
+  es0T = sparse([1], [1  ], [1], 1, Nsp)
+  esNT = sparse([1], [Nsp], [1], 1, Nsp)
+
+  L1 = (Is ⊗ er0T)
+  L2 = (Is ⊗ erNT)
+  L3 = (es0T ⊗ Ir)
+  L4 = (esNT ⊗ Ir)
 
   if false
     # Force fully compatible
@@ -281,21 +308,17 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
     SsNT = ((Ds' * EsN) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
   end
 
+  #
+  # Store coefficient matrices as matrices
+  #
   crs0 = sparse(Diagonal(crs[1:Nrp]))
   crsN = sparse(Diagonal(crs[Nrp*Ns .+ (1:Nrp)]))
   csr0 = sparse(Diagonal(csr[1   .+ Nrp*(0:Ns)]))
   csrN = sparse(Diagonal(csr[Nrp .+ Nrp*(0:Ns)]))
 
-  er0T = sparse([1], [1  ], [1], 1, Nrp)
-  erNT = sparse([1], [Nrp], [1], 1, Nrp)
-  es0T = sparse([1], [1  ], [1], 1, Nsp)
-  esNT = sparse([1], [Nsp], [1], 1, Nsp)
-
-  L1 = (Is ⊗ er0T)
-  L2 = (Is ⊗ erNT)
-  L3 = (es0T ⊗ Ir)
-  L4 = (esNT ⊗ Ir)
-
+  #
+  # Block surface matrices
+  #
   nx1 = -L1 * ys
   ny1 =  L1 * xs
   sJ1 = hypot.(nx1, ny1)
@@ -332,12 +355,14 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   H4 = Hr
   H4I = HrI
 
+  #
+  # Penalty terms
+  #
   τ1 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ1))
   τ2 = sparse(1:Nsp, 1:Nsp, τscale*Ns./(2*sJ2))
   τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ3))
   τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nr./(2*sJ4))
 
-  # TODO: Check signs on Q terms (and update write up with correct signs)
   B1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1 * SJ1) ⊗ Er0)
   B2 = -(SrN + SrNT) - ((csrN * Qs + QsT * csrN) ⊗ ErN) + ((τ2 * H2 * SJ2) ⊗ ErN)
   B3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3 * SJ3))
