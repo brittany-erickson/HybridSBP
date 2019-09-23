@@ -110,7 +110,7 @@ end
 #}}}
 
 #{{{ locoperator
-function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
+function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp
@@ -154,7 +154,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   crr = J .* (rx .* rx + ry .* ry)
   crs = csr = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
-  ψmin = (crr + css - sqrt.((crr - css).^2 + 4crs.^2)) / 2
 
   #{{{ Set up the rr derivative matrix
   ISr0 = Array{Int64,1}(undef,0)
@@ -339,10 +338,50 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   #
   # Penalty terms
   #
-  τ1 = sparse(1:Nsp, 1:Nsp, τscale*Ns/2)
-  τ2 = sparse(1:Nsp, 1:Nsp, τscale*Ns/2)
-  τ3 = sparse(1:Nrp, 1:Nrp, τscale*Nr/2)
-  τ4 = sparse(1:Nrp, 1:Nrp, τscale*Nr/2)
+  if p == 2
+    l = 2
+    β = 0.363636363
+    α = 1 / 2
+  elseif p == 4
+    l = 4
+    β = 0.2505765857
+    α = 17 / 48
+  elseif p == 6
+    l = 6
+    β = 0.1878687080
+    α = 13649 / 43200
+  else
+    error("unknown order")
+  end
+
+  crr = reshape(crr, Nrp, Nsp)
+  css = reshape(css, Nrp, Nsp)
+  crs = reshape(crs, Nrp, Nsp)
+  csr = reshape(csr, Nrp, Nsp)
+  ψmin = reshape((crr + css - sqrt.((crr - css).^2 + 4crs.^2)) / 2, Nrp, Nsp)
+
+  hr = 2 / Nr
+  hs = 2 / Ns
+
+  ψ1 = ψmin[  1, :]
+  ψ2 = ψmin[Nrp, :]
+  ψ3 = ψmin[:,   1]
+  ψ4 = ψmin[:, Nsp]
+  for k = 2:l
+    ψ1 = min.(ψ1, ψmin[k, :])
+    ψ2 = min.(ψ2, ψmin[Nr-k, :])
+    ψ3 = min.(ψ3, ψmin[:, k])
+    ψ4 = min.(ψ4, ψmin[:, Ns-k])
+  end
+  τ1 = (2τscale / hr) * (crr[  1, :].^2 / β + crs[  1, :].^2 / α) ./ ψ1
+  τ2 = (2τscale / hr) * (crr[Nrp, :].^2 / β + crs[Nrp, :].^2 / α) ./ ψ2
+  τ3 = (2τscale / hs) * (css[:,   1].^2 / β + crs[:,   1].^2 / α) ./ ψ3
+  τ4 = (2τscale / hs) * (css[:, Nsp].^2 / β + crs[:, Nsp].^2 / α) ./ ψ4
+
+  τ1 = sparse(1:Nsp, 1:Nsp, τ1)
+  τ2 = sparse(1:Nsp, 1:Nsp, τ2)
+  τ3 = sparse(1:Nrp, 1:Nrp, τ3)
+  τ4 = sparse(1:Nrp, 1:Nrp, τ4)
 
   C̃1 =  (Sr0 + Sr0T) + ((csr0 * Qs + QsT * csr0) ⊗ Er0) + ((τ1 * H1) ⊗ Er0)
   C̃2 = -(SrN + SrNT) - ((csrN * Qs + QsT * csrN) ⊗ ErN) + ((τ2 * H2) ⊗ ErN)
@@ -496,21 +535,24 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
     # if element and face orientation do not match, then flip
     if EToO[fp, ep]
       IT = [IT; Ie .+ (FToλstarts[f] - 1)]
-      @assert lop[em][11][fm] ≈ lop[ep][11][fp]
-      @assert lop[em][6][fm] ≈ lop[ep][6][fp]
-      @assert lop[em][9][fm] ≈ lop[ep][9][fp]
+      # @assert lop[em][11][fm] ≈ lop[ep][11][fp]
+      # @assert lop[em][6][fm] ≈ lop[ep][6][fp]
+      # @assert lop[em][9][fm] ≈ lop[ep][9][fp]
+      τm = Vector(diag(lop[em][11][fm]))
+      τp = Vector(diag(lop[ep][11][fp]))
     else
       IT = [IT; FToλstarts[f+1] .- Ie]
-      @assert lop[em][11][fm] ≈ rot180(lop[ep][11][fp])
-      @assert lop[em][6][fm] ≈ lop[ep][6][fp][end:-1:1]
-      @assert lop[em][9][fm] ≈ rot180(lop[ep][9][fp])
+      # @assert lop[em][11][fm] ≈ rot180(lop[ep][11][fp])
+      # @assert lop[em][6][fm] ≈ lop[ep][6][fp][end:-1:1]
+      # @assert lop[em][9][fm] ≈ rot180(lop[ep][9][fp])
+      τm = Vector(diag(lop[em][11][fm]))
+      τp = Vector(diag(rot180(lop[ep][11][fp])))
     end
     JT = [JT; Je .+ (vstarts[ep] - 1)]
     VT = [VT; Ve]
 
     Hf = Vector(diag(lop[em][9][fm]))
-    τf = Vector(diag(lop[em][11][fm]))
-    VD = [VD; 2 * Hf .* τf]
+    VD = [VD; Hf .* (τm + τp)]
 
   end
   λNp = FToλstarts[nfaces+1]-1
@@ -531,7 +573,8 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     if LFToB[lf] == BC_DIRICHLET
       vf = bc_Dirichlet(lf, xf, yf, bcargs...)
     elseif LFToB[lf] == BC_NEUMANN
-      vf = sJ[lf] .* bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...) ./ diag(τ[lf])
+      gN = bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...)
+      vf = sJ[lf] .* gN ./ diag(τ[lf])
     elseif LFToB[lf] == BC_LOCKED_INTERFACE
       continue # nothing to do here
     elseif LFToB[lf] >= BC_JUMP_INTERFACE
