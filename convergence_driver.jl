@@ -146,6 +146,7 @@ let
       end
     end
     LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
+    # TODO: Need to account for jumps still!
     λ[:] = BF \ bλ
 
     u[:] = T' * λ
