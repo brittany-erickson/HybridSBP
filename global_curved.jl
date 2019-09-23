@@ -295,19 +295,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 100)
   L3 = (es0T ⊗ Ir)
   L4 = (esNT ⊗ Ir)
 
-  if false
-    # Force fully compatible
-    Sr0 = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Er0 * Dr))
-    SrN = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (ErN * Dr))
-    Ss0 = ((Es0 * Ds) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
-    SsN = ((EsN * Ds) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
-
-    Sr0T = ((sparse(Diagonal(crr[1   .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * Er0))
-    SrNT = ((sparse(Diagonal(crr[Nrp .+ Nrp*(0:Ns)])) * Hs) ⊗ (Dr' * ErN))
-    Ss0T = ((Ds' * Es0) ⊗ (Hr * sparse(Diagonal(css[1:Nrp]))))
-    SsNT = ((Ds' * EsN) ⊗ (Hr * sparse(Diagonal(css[Nrp*Ns .+ (1:Nrp)]))))
-  end
-
   #
   # Store coefficient matrices as matrices
   #
