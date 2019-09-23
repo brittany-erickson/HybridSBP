@@ -1,4 +1,4 @@
-do_plotting = true
+do_plotting = false
 include("global_curved.jl")
 
 let
@@ -151,9 +151,11 @@ let
     u[:] = T' * λ
     u[:] .= g .+ u
 
-    p1 = plot()
-    p2 = plot()
-    p3 = plot()
+    @plotting begin
+      p1 = plot()
+      p2 = plot()
+      p3 = plot()
+    end
     for e = 1:nelems
       F = locfactors[e]
       (~, ~, ~, (x, y), JH, ~, ~, ~, ~, ~, ~, ~) = lop[e]
