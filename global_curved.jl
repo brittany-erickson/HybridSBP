@@ -661,6 +661,21 @@ function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
   bcstarts
 end
 
+function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
+  for e = 1:length(F)
+    if !lockedblock[e]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      #=
+      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
+            (@view g[vstarts[e]:(vstarts[e+1]-1)]))
+      =#
+    else
+      @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
+    end
+  end
+  mul!(b, T, u)
+  b
+end
 
 #{{{ assembleλmatrix: Schur complement system
 function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
@@ -879,19 +894,3 @@ function SeekToSubstring(lines, substring; first=1)
 end
 
 # }}}
-
-function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
-  for e = 1:length(F)
-    if !lockedblock[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
-      #=
-      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
-            (@view g[vstarts[e]:(vstarts[e+1]-1)]))
-      =#
-    else
-      @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
-    end
-  end
-  mul!(b, T, u)
-  b
-end
