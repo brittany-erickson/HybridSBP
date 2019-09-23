@@ -880,18 +880,6 @@ end
 
 # }}}
 
-function LocalToGLobalRHS!(b, g, u, F, T, vstarts)
-  for e = 1:length(F)
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
-    #=
-    ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
-    (@view g[vstarts[e]:(vstarts[e+1]-1)]))
-    =#
-  end
-  mul!(b, T, u)
-  b
-end
-
 function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
   for e = 1:length(F)
     if !lockedblock[e]
