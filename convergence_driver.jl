@@ -26,18 +26,17 @@ let
   for f ∈ (1, 5, 8, 11, 4, 7, 10, 12)
     FToB[f] = BC_DIRICHLET
   end
-  =#
-
   if typeof(verts) <: Tuple
     verts = flatten_tuples(verts)
     EToV  = flatten_tuples(EToV)
     EToF  = flatten_tuples(EToF)
   end
+  =#
+
   N1 = N0 = 16
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
   @show (Lx, Ly)
-
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
@@ -70,7 +69,10 @@ let
     Nr = EToN0[1, :] * (2^(lvl-1))
     Ns = EToN0[2, :] * (2^(lvl-1))
 
-    #{{{ Build the local volume operators
+    #
+    # Build the local volume operators
+    #
+
     # Dictionary to store the operators
     OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
     lop = Dict{Int64, OPTYPE}()
@@ -86,9 +88,10 @@ let
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
     end
-    #}}}
 
+    #
     # Assemble the global volume operators
+    #
     (M, T, D, vstarts, FToλstarts) =
     LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                          (x) -> cholesky(Symmetric(x)))
