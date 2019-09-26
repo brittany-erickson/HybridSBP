@@ -50,7 +50,8 @@ function transfinite_blend(v1::T1, v2::T2, v3::T3, v4::T4, r, s;
                            e2 = (α) -> v2 * (1 .- α) / 2 + v4 * (1 .+ α) / 2,
                            e3 = (α) -> v1 * (1 .- α) / 2 + v2 * (1 .+ α) / 2,
                            e4 = (α) -> v3 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
-                          ) where {T1 <: Number, T2 <: Number, T3 <: Number, T4 <: Number}
+                          ) where {T1 <: Number, T2 <: Number,
+                                   T3 <: Number, T4 <: Number}
   transfinite_blend(e1, e2, e3, e4, r, s)
 end
 #}}}
@@ -432,74 +433,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
    Hf = (H1, H2, H3, H4),
    HfI = (H1I, H2I, H3I, H4I),
    τ = (τ1, τ2, τ3, τ4))
-end
-#}}}
-
-#{{{ plot the mesh
-@plotting function plotmesh(p, lop, Nr, Ns, EToF, FToB)
-  for e = 1:length(lop)
-    (x, y) = lop[e].coord
-    plot!(p, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
-          color=:black, legend=:none)
-    plot!(p, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
-          color=:black, legend=:none)
-    L = lop[e].L
-    for lf = 1:4
-      f = EToF[lf, e]
-      if FToB[f] == BC_DIRICHLET
-        plot!(p, L[lf] * x, L[lf] * y, color=:red, legend=:none, linewidth=3)
-      elseif FToB[f] == BC_NEUMANN
-        plot!(p, L[lf] * x, L[lf] * y, color=:blue, legend=:none, linewidth=3)
-      elseif FToB[f] == BC_LOCKED_INTERFACE
-        plot!(p, L[lf] * x, L[lf] * y, color=:green, legend=:none, linewidth=3)
-      elseif FToB[f] >= BC_JUMP_INTERFACE
-        plot!(p, L[lf] * x, L[lf] * y, color=:purple, legend=:none, linewidth=3)
-      else
-        error("invalid bc")
-      end
-    end
-  end
-end
-#}}}
-
-#{{{glovoloperator: Assemble the global volume operators
-function glovoloperator(lop, Nr, Ns)
-  nelems = length(lop)
-  vstarts = Array{Int64, 1}(undef, nelems + 1)
-  vstarts[1] = 1
-  Np = Array{Int64, 1}(undef, nelems)
-  IM = Array{Int64,1}(undef,0)
-  JM = Array{Int64,1}(undef,0)
-  VM = Array{Float64,1}(undef,0)
-  VH = Array{Float64,1}(undef,0)
-  X = Array{Float64,1}(undef,0)
-  Y = Array{Float64,1}(undef,0)
-  E = Array{Float64,1}(undef,0)
-  for e = 1:nelems
-    # Fill arrays to build global sparse matrix
-    Np[e] = (Nr[e]+1)*(Ns[e]+1)
-    vstarts[e+1] = vstarts[e] + Np[e]
-    M̃ = lop[e].M̃
-    (Ie, Je, Ve) = findnz(M̃)
-    IM = [IM;Ie .+ (vstarts[e]-1)]
-    JM = [JM;Je .+ (vstarts[e]-1)]
-    VM = [VM;Ve]
-
-    # Global "mass" matrix
-    JH = lop[e].JH
-    VH = [VH;Vector(diag(JH))]
-
-    # global coordinates and element number array (needed for jump)
-    (x,y) = lop[e].coord
-    X = [X;x]
-    Y = [Y;y]
-    E = [E;e * ones(Np[e])]
-
-  end
-  VNp = vstarts[nelems+1]-1 # total number of volume points
-  M̃ = sparse(IM, JM, VM, VNp, VNp)
-
-  (vstarts, M̃, VH, X, Y, E)
 end
 #}}}
 
