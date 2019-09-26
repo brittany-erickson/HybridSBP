@@ -92,7 +92,7 @@ let
     #
     # Assemble the global volume operators
     #
-    (M, T, D, vstarts, FToλstarts) =
+    (M, FbarT, D, vstarts, FToλstarts) =
     LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                          (x) -> cholesky(Symmetric(x)))
     locfactors = M.F
@@ -107,7 +107,7 @@ let
     # @show (VNp, λNp, δNp)
 
     # Build the (sparse) λ matrix using the schur complement and factor
-    B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
+    B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
     BF = cholesky(Symmetric(B))
 
     (bλ, λ) = (zeros(λNp), zeros(λNp))
@@ -148,11 +148,11 @@ let
         lockedblock[e] = false
       end
     end
-    LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
+    LocalToGLobalRHS!(bλ, g, u, locfactors, FbarT, vstarts, lockedblock)
     # TODO: Need to account for jumps still!
     λ[:] = BF \ bλ
 
-    u[:] = T' * λ
+    u[:] = FbarT' * λ
     u[:] .= g .+ u
 
     @plotting begin

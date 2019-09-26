@@ -640,9 +640,9 @@ end
 function LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                               factorization)
   M = SBPLocalOperator1(lop, Nr, Ns, factorization)
-  (FToλstarts, T, D) = gloλoperator(lop, M.offset, FToB, FToE, FToLF, EToO, EToS,
-                                 Nr, Ns)
-  (M, T, D, M.offset, FToλstarts)
+  (FToλstarts, FbarT, D) = gloλoperator(lop, M.offset, FToB, FToE, FToLF, EToO,
+                                        EToS, Nr, Ns)
+  (M, FbarT, D, M.offset, FToλstarts)
 end
 
 function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
@@ -661,24 +661,23 @@ function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
   bcstarts
 end
 
-function LocalToGLobalRHS!(b, g, u, F, T, vstarts, lockedblock)
-  for e = 1:length(F)
+function LocalToGLobalRHS!(b, g, u, M, FbarT, vstarts, lockedblock)
+  for e = 1:length(M)
     if !lockedblock[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = F[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = M[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
       #=
-      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F[e],
+      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), M[e],
             (@view g[vstarts[e]:(vstarts[e+1]-1)]))
       =#
     else
       @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
     end
   end
-  mul!(b, T, u)
-  b
+  mul!(b, FbarT, u)
 end
 
 #{{{ assembleλmatrix: Schur complement system
-function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
+function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, FbarT)
   nfaces = length(FToλstarts)-1
   nelems = length(vstarts)-1
   λNp = FToλstarts[nfaces+1]-1
@@ -701,7 +700,7 @@ function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
   Je[1:λNp] = 1:λNp
   Ve[1:λNp] = D
   offset = λNp
-  Ttranspose = T'
+  Fbar = FbarT'
   for e = 1:nelems
     # println((e, nelems))
     vrng = vstarts[e]:(vstarts[e+1]-1)
@@ -709,12 +708,12 @@ function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, T)
       f = EToF[lf,e]
       if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] >= BC_JUMP_INTERFACE
         λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
-        B = Matrix(F[e] \ Ttranspose[vrng, λrng])
+        B = Matrix(F[e] \ Fbar[vrng, λrng])
         for lf2 = 1:4
           f2 = EToF[lf2,e]
           if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] >= BC_JUMP_INTERFACE
             λrng2 = FToλstarts[f2]:(FToλstarts[f2+1]-1)
-            C = T[λrng2, vrng] * B
+            C = FbarT[λrng2, vrng] * B
             λblck = λrng*ones(Int64, 1, length(λrng2))
             λblck2 = ones(Int64, length(λrng), 1) * λrng2'
             last = length(λrng) * length(λrng2)

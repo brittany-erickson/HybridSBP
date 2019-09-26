@@ -166,7 +166,7 @@ let
     #}}}
 
     # Assemble the global volume operators
-    (M, T, D, vstarts, FToλstarts) =
+    (M, FbarT, D, vstarts, FToλstarts) =
     LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                          (x) -> cholesky(Symmetric(x)))
     locfactors = M.F
@@ -181,7 +181,7 @@ let
     # @show (VNp, λNp, δNp)
 
     # Build the (sparse) λ matrix using the schur complement and factor
-    B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, T)
+    B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
     BF = cholesky(Symmetric(B))
 
     (bλ, λ) = (zeros(λNp), zeros(λNp))
@@ -219,8 +219,8 @@ let
     end
 
     for e = 1:nelems
-      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
-                  bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
+      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e],
+                  FToB[EToF[:,e]], bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
     end
 
     lockedblock = Array{Bool, 1}(undef, nelems)
@@ -232,11 +232,11 @@ let
         lockedblock[e] = false
       end
     end
-    LocalToGLobalRHS!(bλ, g, u, locfactors, T, vstarts, lockedblock)
+    LocalToGLobalRHS!(bλ, g, u, locfactors, FbarT, vstarts, lockedblock)
     #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
-    u[:] = T' * λ
+    u[:] = FbarT' * λ
     u[:] .= g .+ u
 
     @plotting begin
