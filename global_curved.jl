@@ -431,8 +431,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
    ny = (ny1, ny2, ny3, ny4),
    Hf = (H1, H2, H3, H4),
    HfI = (H1I, H2I, H3I, H4I),
-   τ = (τ1, τ2, τ3, τ4),
-   G = (G1, G2, G3, G4))
+   τ = (τ1, τ2, τ3, τ4))
 end
 #}}}
 
