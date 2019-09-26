@@ -388,6 +388,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   C̃3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3))
   C̃4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4))
 
+  # TODO: Fix minus sign (reverse of the paper)
   F1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T) + ((τ1 * H1) ⊗ er0T)
   F2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT) + ((τ2 * H2) ⊗ erNT)
   F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3))
@@ -425,21 +426,30 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   # (E, V) = eigen(Matrix(M̃))
   # println((minimum(E), maximum(E)))
   JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
-  (M̃, (F1, F2, F3, F4), (L1, L2, L3, L4), (x, y), JH,
-   (sJ1, sJ2, sJ3, sJ4), (nx1, nx2, nx3, nx4), (ny1, ny2, ny3, ny4),
-   (H1, H2, H3, H4), (H1I, H2I, H3I, H4I), (τ1, τ2, τ3, τ4), (G1, G2, G3, G4))
+  (M̃ = M̃,
+   F = (F1, F2, F3, F4),
+   L = (L1, L2, L3, L4),
+   coord = (x, y),
+   JH = JH,
+   sJ = (sJ1, sJ2, sJ3, sJ4),
+   nx = (nx1, nx2, nx3, nx4),
+   ny = (ny1, ny2, ny3, ny4),
+   Hf = (H1, H2, H3, H4),
+   HfI = (H1I, H2I, H3I, H4I),
+   τ = (τ1, τ2, τ3, τ4),
+   G = (G1, G2, G3, G4))
 end
 #}}}
 
 #{{{ plot the mesh
 @plotting function plotmesh(p, lop, Nr, Ns, EToF, FToB)
   for e = 1:length(lop)
-    (x, y) = lop[e][4]
+    (x, y) = lop[e].coord
     plot!(p, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
           color=:black, legend=:none)
     plot!(p, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
           color=:black, legend=:none)
-    L = lop[e][3]
+    L = lop[e].L
     for lf = 1:4
       f = EToF[lf, e]
       if FToB[f] == BC_DIRICHLET
@@ -475,28 +485,27 @@ function glovoloperator(lop, Nr, Ns)
     # Fill arrays to build global sparse matrix
     Np[e] = (Nr[e]+1)*(Ns[e]+1)
     vstarts[e+1] = vstarts[e] + Np[e]
-    M = lop[e][1]
-    (Ie, Je, Ve) = findnz(M)
+    M̃ = lop[e].M̃
+    (Ie, Je, Ve) = findnz(M̃)
     IM = [IM;Ie .+ (vstarts[e]-1)]
     JM = [JM;Je .+ (vstarts[e]-1)]
     VM = [VM;Ve]
 
     # Global "mass" matrix
-    H = lop[e][5]
-    VH = [VH;Vector(diag(H))]
+    JH = lop[e].JH
+    VH = [VH;Vector(diag(JH))]
 
     # global coordinates and element number array (needed for jump)
-    x = lop[e][4][1]
+    (x,y) = lop[e].coord
     X = [X;x]
-    y = lop[e][4][2]
     Y = [Y;y]
     E = [E;e * ones(Np[e])]
 
   end
   VNp = vstarts[nelems+1]-1 # total number of volume points
-  M = sparse(IM, JM, VM, VNp, VNp)
+  M̃ = sparse(IM, JM, VM, VNp, VNp)
 
-  (vstarts, M, VH, X, Y, E)
+  (vstarts, M̃, VH, X, Y, E)
 end
 #}}}
 
@@ -523,50 +532,51 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
     FToλstarts[f+1] = FToλstarts[f] + Nλp[f]
 
     @assert EToO[fm, em] && EToS[fm, em] == 1
-    Fm = lop[em][2][fm]
+    Fm = lop[em].F[fm]
     (Ie, Je, Ve) = findnz(Fm)
     IT = [IT; Ie .+ (FToλstarts[f] - 1)]
     JT = [JT; Je .+ (vstarts[em] - 1)]
     VT = [VT; Ve]
 
     @assert EToS[fp, ep] == 2
-    Fp = lop[ep][2][fp]
+    Fp = lop[ep].F[fp]
     (Ie, Je, Ve) = findnz(Fp)
     # if element and face orientation do not match, then flip
     if EToO[fp, ep]
       IT = [IT; Ie .+ (FToλstarts[f] - 1)]
-      # @assert lop[em][11][fm] ≈ lop[ep][11][fp]
-      # @assert lop[em][6][fm] ≈ lop[ep][6][fp]
-      # @assert lop[em][9][fm] ≈ lop[ep][9][fp]
-      τm = Vector(diag(lop[em][11][fm]))
-      τp = Vector(diag(lop[ep][11][fp]))
+      τm = Vector(diag(lop[em].τ[fm]))
+      τp = Vector(diag(lop[ep].τ[fp]))
     else
       IT = [IT; FToλstarts[f+1] .- Ie]
-      # @assert lop[em][11][fm] ≈ rot180(lop[ep][11][fp])
-      # @assert lop[em][6][fm] ≈ lop[ep][6][fp][end:-1:1]
-      # @assert lop[em][9][fm] ≈ rot180(lop[ep][9][fp])
-      τm = Vector(diag(lop[em][11][fm]))
-      τp = Vector(diag(rot180(lop[ep][11][fp])))
+      τm = Vector(diag(lop[em].τ[fm]))
+      τp = Vector(diag(rot180(lop[ep].τ[fp])))
     end
     JT = [JT; Je .+ (vstarts[ep] - 1)]
     VT = [VT; Ve]
 
-    Hf = Vector(diag(lop[em][9][fm]))
+    Hf = Vector(diag(lop[em].Hf[fm]))
     VD = [VD; Hf .* (τm + τp)]
 
   end
   λNp = FToλstarts[nfaces+1]-1
   VNp = vstarts[nelems+1]-1
-  T = sparse(IT, JT, VT, λNp, VNp)
+  FbarT = sparse(IT, JT, VT, λNp, VNp)
   # Ttranspose = sparse(JT, IT, VT, VNp, λNp)
-  (FToλstarts, T, VD)
+  (FToλstarts, FbarT, VD)
 end
 #}}}
 
 #{{{ volbcarray()
 function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
-  (_, F, L, (x, y), _, sJ, nx, ny, _, _, τ) = lop
+  L = lop.L
+  F = lop.F
+  (x, y) = lop.coord
+  Hf = lop.Hf
+  sJ = lop.sJ
+  nx = lop.nx
+  ny = lop.ny
+  τ = lop.τ
   ge[:] .= 0
   for lf = 1:4
     (xf, yf) = (L[lf] * x, L[lf] * y)
@@ -619,17 +629,16 @@ function SBPLocalOperator1(lop, Nr, Ns, factorization)
     vstarts[e+1] = vstarts[e] + Np[e]
 
     # Global "mass" matrix
-    H = lop[e][5]
-    VH = [VH;Vector(diag(H))]
+    JH = lop[e].JH
+    VH = [VH;Vector(diag(JH))]
 
     # global coordinates and element number array (needed for jump)
-    x = lop[e][4][1]
+    (x,y) = lop[e].coord
     X = [X;x]
-    y = lop[e][4][2]
     Y = [Y;y]
     E = [E;e * ones(Int64, Np[e])]
 
-    factors[e] = factorization(lop[e][1])
+    factors[e] = factorization(lop[e].M̃)
   end
   VNp = vstarts[nelems+1]-1 # total number of volume points
 

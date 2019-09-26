@@ -145,7 +145,8 @@ let
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
       @plotting lvl == 1 && let
-        (~, ~, ~, (x, y), JH, ~, ~, ~, ~, ~, ~, ~) = lop[e]
+        (x, y) = lop[e].coord
+        JH = lop[e].JH
         # Do some plotting
         scatter!(p1, verts[1,:], verts[2,:], marker=1, legend=:none)
         LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
@@ -191,7 +192,8 @@ let
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
-        (~, ~, L, (x, y), ~, ~, ~, ~, ~, ~, ~) = lop[e1]
+        (x, y) = lop[e1].coord
+        L = lop[e1].L
         xf = L[lf1] * x
         yf = L[lf1] * y
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] = vex(xf, yf, e2) - vex(xf, yf, e1)
@@ -246,7 +248,8 @@ let
     end
     for e = 1:nelems
       F = locfactors[e]
-      (~, ~, ~, (x, y), JH, ~, ~, ~, ~, ~, ~, ~) = lop[e]
+      JH = lop[e].JH
+      (x, y) = lop[e].coord
 
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=

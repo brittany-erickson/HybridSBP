@@ -162,7 +162,8 @@ let
     end
     for e = 1:nelems
       F = locfactors[e]
-      (~, ~, ~, (x, y), JH, ~, ~, ~, ~, ~, ~, ~) = lop[e]
+      (x, y) = lop[e].coord
+      JH = lop[e].JH
 
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=
