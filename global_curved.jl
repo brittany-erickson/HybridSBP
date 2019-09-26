@@ -389,20 +389,15 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   C̃4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4))
 
   # TODO: Fix minus sign (reverse of the paper)
-  F1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T) + ((τ1 * H1) ⊗ er0T)
-  F2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT) + ((τ2 * H2) ⊗ erNT)
-  F3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr)) + (es0T ⊗ (τ3 * H3))
-  F4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr)) + (esNT ⊗ (τ4 * H4))
+  G1 = -(Is ⊗ er0T) * Sr0 - ((csr0 * Qs) ⊗ er0T)
+  G2 = +(Is ⊗ erNT) * SrN + ((csrN * Qs) ⊗ erNT)
+  G3 = -(es0T ⊗ Ir) * Ss0 - (es0T ⊗ (crs0 * Qr))
+  G4 = +(esNT ⊗ Ir) * SsN + (esNT ⊗ (crsN * Qr))
 
-  G1 =  (Is ⊗ er0T) * Sr0 + ((csr0 * Qs) ⊗ er0T)
-  G2 = -(Is ⊗ erNT) * SrN - ((csrN * Qs) ⊗ erNT)
-  G3 =  (es0T ⊗ Ir) * Ss0 + (es0T ⊗ (crs0 * Qr))
-  G4 = -(esNT ⊗ Ir) * SsN - (esNT ⊗ (crsN * Qr))
-
-  # @assert C̃1 ≈ F1' * L1 + L1' * F1 - ((τ1 * H1) ⊗ Er0)
-  # @assert C̃2 ≈ F2' * L2 + L2' * F2 - ((τ2 * H2) ⊗ ErN)
-  # @assert C̃3 ≈ F3' * L3 + L3' * F3 - (Es0 ⊗ (τ3 * H3))
-  # @assert C̃4 ≈ F4' * L4 + L4' * F4 - (EsN ⊗ (τ4 * H4))
+  F1 = G1 - ((τ1 * H1) ⊗ er0T)
+  F2 = G2 - ((τ2 * H2) ⊗ erNT)
+  F3 = G3 - (es0T ⊗ (τ3 * H3))
+  F4 = G4 - (esNT ⊗ (τ4 * H4))
 
   M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
@@ -593,7 +588,7 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     else
       error("invalid bc")
     end
-    ge[:] += F[lf]' * vf
+    ge[:] -= F[lf]' * vf
   end
 end
 #}}}
@@ -673,7 +668,8 @@ end
 function LocalToGLobalRHS!(b, g, u, M, FbarT, vstarts, lockedblock)
   for e = 1:length(M)
     if !lockedblock[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = M[e] \ g[vstarts[e]:(vstarts[e+1]-1)]
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = -(M[e] \
+                                                g[vstarts[e]:(vstarts[e+1]-1)])
       #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), M[e],
             (@view g[vstarts[e]:(vstarts[e+1]-1)]))
@@ -717,12 +713,12 @@ function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, FbarT)
       f = EToF[lf,e]
       if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] >= BC_JUMP_INTERFACE
         λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
-        B = Matrix(F[e] \ Fbar[vrng, λrng])
+        B = -(Matrix(F[e] \ Fbar[vrng, λrng]))
         for lf2 = 1:4
           f2 = EToF[lf2,e]
           if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] >= BC_JUMP_INTERFACE
             λrng2 = FToλstarts[f2]:(FToλstarts[f2+1]-1)
-            C = FbarT[λrng2, vrng] * B
+            C = -(FbarT[λrng2, vrng] * B)
             λblck = λrng*ones(Int64, 1, length(λrng2))
             λblck2 = ones(Int64, length(λrng), 1) * λrng2'
             last = length(λrng) * length(λrng2)

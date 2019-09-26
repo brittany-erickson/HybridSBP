@@ -152,7 +152,7 @@ let
     # TODO: Need to account for jumps still!
     λ[:] = BF \ bλ
 
-    u[:] = FbarT' * λ
+    u[:] = -FbarT' * λ
     u[:] .= g .+ u
 
     @plotting begin

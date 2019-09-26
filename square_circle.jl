@@ -238,7 +238,7 @@ let
     #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
-    u[:] = FbarT' * λ
+    u[:] = -FbarT' * λ
     u[:] .= g .+ u
 
     @plotting begin
