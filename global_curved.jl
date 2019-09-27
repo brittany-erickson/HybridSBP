@@ -283,6 +283,11 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   Es0 = sparse([1], [1], [1], Nsp, Nsp)
   EsN = sparse([Nsp], [Nsp], [1], Nsp, Nsp)
 
+  er0 = sparse([1  ], [1], [1], Nrp, 1)
+  erN = sparse([Nrp], [1], [1], Nrp, 1)
+  es0 = sparse([1  ], [1], [1], Nsp, 1)
+  esN = sparse([Nsp], [1], [1], Nsp, 1)
+
   er0T = sparse([1], [1  ], [1], 1, Nrp)
   erNT = sparse([1], [Nrp], [1], 1, Nrp)
   es0T = sparse([1], [1  ], [1], 1, Nsp)
@@ -395,10 +400,10 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   G3 = -(es0T ⊗ Ir) * Ss0 - (es0T ⊗ (crs0 * Qr))
   G4 = +(esNT ⊗ Ir) * SsN + (esNT ⊗ (crsN * Qr))
 
-  F1 = G1 - ((τ1 * H1) ⊗ er0T)
-  F2 = G2 - ((τ2 * H2) ⊗ erNT)
-  F3 = G3 - (es0T ⊗ (τ3 * H3))
-  F4 = G4 - (esNT ⊗ (τ4 * H4))
+  F1 = G1' - ((τ1 * H1) ⊗ er0)
+  F2 = G2' - ((τ2 * H2) ⊗ erN)
+  F3 = G3' - (es0 ⊗ (τ3 * H3))
+  F4 = G4' - (esN ⊗ (τ4 * H4))
 
   M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
@@ -410,7 +415,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
     # Modify operators for the BC
     for lf = 1:4
       if LFToB[lf] == BC_NEUMANN
-        M̃ -= F[lf]' * (Diagonal(1 ./ (diag(τ[lf]))) * HfI[lf]) * F[lf]
+        M̃ -= F[lf] * (Diagonal(1 ./ (diag(τ[lf]))) * HfI[lf]) * F[lf]'
       elseif !(LFToB[lf] == BC_DIRICHLET ||
                LFToB[lf] == BC_LOCKED_INTERFACE ||
                LFToB[lf] >= BC_JUMP_INTERFACE)
@@ -460,14 +465,16 @@ function gloλoperator(lop, vstarts, FToB, FToE, FToLF, EToO, EToS, Nr, Ns)
 
     @assert EToO[fm, em] && EToS[fm, em] == 1
     Fm = lop[em].F[fm]
-    (Ie, Je, Ve) = findnz(Fm)
+    # swap I and J to get transpose
+    (Je, Ie, Ve) = findnz(Fm)
     IT = [IT; Ie .+ (FToλstarts[f] - 1)]
     JT = [JT; Je .+ (vstarts[em] - 1)]
     VT = [VT; Ve]
 
     @assert EToS[fp, ep] == 2
     Fp = lop[ep].F[fp]
-    (Ie, Je, Ve) = findnz(Fp)
+    # swap I and J to get transpose
+    (Je, Ie, Ve) = findnz(Fp)
     # if element and face orientation do not match, then flip
     if EToO[fp, ep]
       IT = [IT; Ie .+ (FToλstarts[f] - 1)]
@@ -520,7 +527,7 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     else
       error("invalid bc")
     end
-    ge[:] -= F[lf]' * vf
+    ge[:] -= F[lf] * vf
   end
 end
 #}}}
@@ -645,7 +652,7 @@ function assembleλmatrix(FToλstarts, vstarts, EToF, FToB, F, D, FbarT)
       f = EToF[lf,e]
       if FToB[f] == BC_LOCKED_INTERFACE || FToB[f] >= BC_JUMP_INTERFACE
         λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
-        B = -(Matrix(F[e] \ Fbar[vrng, λrng]))
+        B = -(Matrix(F[e]' \ Fbar[vrng, λrng]))
         for lf2 = 1:4
           f2 = EToF[lf2,e]
           if FToB[f2] == BC_LOCKED_INTERFACE || FToB[f2] >= BC_JUMP_INTERFACE
