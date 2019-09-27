@@ -187,7 +187,7 @@ let
         if EToO[lf, e]
           return -δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
         else
-          return -δ[(FToδstarts[f+1]-1):-1:FToδstarts[f]]
+          error("shouldn't get here")
         end
       else
         if EToO[lf, e]
