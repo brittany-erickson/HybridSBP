@@ -1,12 +1,5 @@
 do_plotting = false
-if !@isdefined mtime_global_curved
-  mtime_global_curved = 0
-end
-if mtime_global_curved < mtime("global_curved.jl")
-  println("including global_curved")
-  include("global_curved.jl")
-  mtime_global_curved = mtime("global_curved.jl")
-end
+include("global_curved.jl")
 
 let
   RS_FAULT = 7
@@ -94,11 +87,13 @@ let
     Nr = EToN0[1, :] * (2^(lvl-1))
     Ns = EToN0[2, :] * (2^(lvl-1))
 
-    #{{{ Build the local volume operators
+    #
+    # Build the local volume operators
+    #
+
     # Dictionary to store the operators
     OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
     lop = Dict{Int64, OPTYPE}()
-    @plotting lvl == 1 && ((p1, p2, p3) = (plot(), plot(), plot()))
     for e = 1:nelems
       # @show (e, nelems)
       # Get the element corners
@@ -144,29 +139,11 @@ let
 
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
-      @plotting lvl == 1 && let
-        (x, y) = lop[e].coord
-        JH = lop[e].JH
-        # Do some plotting
-        scatter!(p1, verts[1,:], verts[2,:], marker=1, legend=:none)
-        LFToLV = flatten_tuples(((1,3), (2, 4), (1,2), (3,4)))
-        if EToBlock[e] == 1
-          plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
-                color=:red)
-          plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
-                color=:red)
-        else
-          plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1), reshape(y, Nr[e]+1, Ns[e]+1),
-                color=:blue)
-          plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1)', reshape(y, Nr[e]+1, Ns[e]+1)',
-                color=:blue)
-        end
-      end
     end
-    @plotting lvl == 1 && display(plot!(p1, aspect_ratio = 1))
-    #}}}
 
+    #
     # Assemble the global volume operators
+    #
     (M, FbarT, D, vstarts, FToλstarts) =
     LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                          (x) -> cholesky(Symmetric(x)))
@@ -185,7 +162,7 @@ let
     B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
     BF = cholesky(Symmetric(B))
 
-    (bλ, λ) = (zeros(λNp), zeros(λNp))
+    (bλ, λ, gδ) = (zeros(λNp), zeros(λNp), zeros(λNp))
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
     δ = zeros(δNp)
     for f = 1:nfaces
@@ -196,7 +173,8 @@ let
         L = lop[e1].L
         xf = L[lf1] * x
         yf = L[lf1] * y
-        @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] = vex(xf, yf, e2) - vex(xf, yf, e1)
+        @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] =
+            vex(xf, yf, e2) - vex(xf, yf, e1)
       end
     end
 
@@ -221,7 +199,15 @@ let
     end
 
     for e = 1:nelems
-      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e],
+      gδe = ntuple(4) do lf
+        f = EToF[lf, e]
+        if EToO[lf, e]
+          return @view gδ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+        else
+          return  @view gδ[(FToλstarts[f+1]-1):-1:FToλstarts[f]]
+        end
+      end
+      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), gδe, lop[e],
                   FToB[EToF[:,e]], bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
     end
 
@@ -234,7 +220,7 @@ let
         lockedblock[e] = false
       end
     end
-    LocalToGLobalRHS!(bλ, g, u, locfactors, FbarT, vstarts, lockedblock)
+    LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts, lockedblock)
     #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
@@ -248,8 +234,8 @@ let
     end
     for e = 1:nelems
       F = locfactors[e]
-      JH = lop[e].JH
       (x, y) = lop[e].coord
+      JH = lop[e].JH
 
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=

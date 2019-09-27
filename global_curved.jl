@@ -501,7 +501,7 @@ end
 #}}}
 
 #{{{ volbcarray()
-function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
+function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
   L = lop.L
   F = lop.F
@@ -524,6 +524,7 @@ function locbcarray!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     elseif LFToB[lf] >= BC_JUMP_INTERFACE
       # In this case we need to add in half the jump
       vf = in_jump(lf, xf, yf, bcargs...) / 2
+      gδe[lf][:] -= Hf[lf] * τ[lf] * vf
     else
       error("invalid bc")
     end
@@ -604,10 +605,10 @@ function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
   bcstarts
 end
 
-function LocalToGLobalRHS!(b, g, u, M, FbarT, vstarts, lockedblock)
+function LocalToGLobalRHS!(b, g, gδ, u, M, FbarT, vstarts, lockedblock)
   for e = 1:length(M)
     if !lockedblock[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = -(M[e] \
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
                                                 g[vstarts[e]:(vstarts[e+1]-1)])
       #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), M[e],
@@ -618,6 +619,7 @@ function LocalToGLobalRHS!(b, g, u, M, FbarT, vstarts, lockedblock)
     end
   end
   mul!(b, FbarT, u)
+  @. b = gδ - b
 end
 
 #{{{ assembleλmatrix: Schur complement system

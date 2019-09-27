@@ -110,7 +110,7 @@ let
     B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
     BF = cholesky(Symmetric(B))
 
-    (bλ, λ) = (zeros(λNp), zeros(λNp))
+    (bλ, λ, gδ) = (zeros(λNp), zeros(λNp), zeros(λNp))
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
     δ = zeros(δNp)
 
@@ -135,8 +135,16 @@ let
     end
 
     for e = 1:nelems
-      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), lop[e], FToB[EToF[:,e]],
-                  bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
+      gδe = ntuple(4) do lf
+        f = EToF[lf, e]
+        if EToO[lf, e]
+          return @view gδ[FToλstarts[f]:(FToλstarts[f+1]-1)]
+        else
+          return  @view gδ[(FToλstarts[f+1]-1):-1:FToλstarts[f]]
+        end
+      end
+      locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), gδe, lop[e],
+                  FToB[EToF[:,e]], bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
     end
 
     lockedblock = Array{Bool, 1}(undef, nelems)
@@ -148,8 +156,8 @@ let
         lockedblock[e] = false
       end
     end
-    LocalToGLobalRHS!(bλ, g, u, locfactors, FbarT, vstarts, lockedblock)
-    # TODO: Need to account for jumps still!
+    LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts, lockedblock)
+    #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
     u[:] = -FbarT' * λ
@@ -173,6 +181,7 @@ let
 
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = u[vstarts[e]:(vstarts[e+1]-1)] - vex(x, y, e)
       ϵ[lvl] += Δ[vstarts[e]:(vstarts[e+1]-1)]' * JH * Δ[vstarts[e]:(vstarts[e+1]-1)]
+      #=
       @plotting begin
         plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1),
               reshape(y, Nr[e]+1, Ns[e]+1),
@@ -184,15 +193,18 @@ let
               reshape(y, Nr[e]+1, Ns[e]+1),
               reshape(Δ[vstarts[e]:(vstarts[e+1]-1)], Nr[e]+1, Ns[e]+1))
       end
+      =#
     end
-    ϵ[lvl] = sqrt(ϵ[lvl])
-    @show (lvl, ϵ[lvl])
+    #=
     @plotting begin
       plot!(p1, aspect_ratio = 1, camera = (15, 26), legend=:none)
       plot!(p2, aspect_ratio = 1, camera = (15, 26), legend=:none)
       plot!(p3, aspect_ratio = 1, camera = (15, 26), legend=:none)
       display(plot(p1, p2, p3, layout = (1,3)))
     end
+    =#
+    ϵ[lvl] = sqrt(ϵ[lvl])
+    @show (lvl, ϵ[lvl])
   end
   println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
 
