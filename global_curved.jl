@@ -1,20 +1,6 @@
 using SparseArrays
 using LinearAlgebra
 
-if do_plotting
-  macro plotting(ex)
-    return :($(esc(ex)))
-  end
-else
-  macro plotting(ex)
-  end
-end
-
-@plotting let
-  using Plots
-  # pyplot()
-end
-
 include("diagonal_sbp.jl")
 
 # flatten tuples to arrays

@@ -1,4 +1,3 @@
-do_plotting = false
 include("global_curved.jl")
 
 let
@@ -160,11 +159,6 @@ let
     u[:] = -FbarT' * λ
     u[:] .= g .+ u
 
-    @plotting begin
-      p1 = plot()
-      p2 = plot()
-      p3 = plot()
-    end
     for e = 1:nelems
       F = locfactors[e]
       (x, y) = lop[e].coord
@@ -178,28 +172,7 @@ let
 
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = u[vstarts[e]:(vstarts[e+1]-1)] - vex(x, y, e)
       ϵ[lvl] += Δ[vstarts[e]:(vstarts[e+1]-1)]' * JH * Δ[vstarts[e]:(vstarts[e+1]-1)]
-      #=
-      @plotting begin
-        plot!(p1, reshape(x, Nr[e]+1, Ns[e]+1),
-              reshape(y, Nr[e]+1, Ns[e]+1),
-              reshape(u[vstarts[e]:(vstarts[e+1]-1)], Nr[e]+1, Ns[e]+1))
-        plot!(p2, reshape(x, Nr[e]+1, Ns[e]+1),
-              reshape(y, Nr[e]+1, Ns[e]+1),
-              reshape(vex(x, y, e), Nr[e]+1, Ns[e]+1))
-        plot!(p3, reshape(x, Nr[e]+1, Ns[e]+1),
-              reshape(y, Nr[e]+1, Ns[e]+1),
-              reshape(Δ[vstarts[e]:(vstarts[e+1]-1)], Nr[e]+1, Ns[e]+1))
-      end
-      =#
     end
-    #=
-    @plotting begin
-      plot!(p1, aspect_ratio = 1, camera = (15, 26), legend=:none)
-      plot!(p2, aspect_ratio = 1, camera = (15, 26), legend=:none)
-      plot!(p3, aspect_ratio = 1, camera = (15, 26), legend=:none)
-      display(plot(p1, p2, p3, layout = (1,3)))
-    end
-    =#
     ϵ[lvl] = sqrt(ϵ[lvl])
     @show (lvl, ϵ[lvl])
   end
