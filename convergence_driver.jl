@@ -2,9 +2,6 @@ do_plotting = false
 include("global_curved.jl")
 
 let
-  RS_FAULT = 7
-  VP_FAULT = 8
-
   SBPp   = 6 # SBP interior order
 
   (verts, EToV, EToF, FToB) = read_inp_2d("meshes/flower_v2.inp")
@@ -98,7 +95,7 @@ let
     locfactors = M.F
 
     # Get a unique array indexes for the face to jumps map
-    FToδstarts = bcstarts(FToB, FToE, FToLF, (RS_FAULT,VP_FAULT), Nr, Ns)
+    FToδstarts = bcstarts(FToB, FToE, FToLF, BC_JUMP_INTERFACE, Nr, Ns)
 
     # Compute the number of volume, trace (λ), and jump (δ) points
     VNp = vstarts[nelems+1]-1
