@@ -1,7 +1,8 @@
 include("global_curved.jl")
 
 let
-  SBPp   = 6 # SBP interior order
+  # SBP interior order
+  SBPp   = 6
 
   # mesh file side set type to actually boundary condition type
   bc_map = [BC_DIRICHLET, BC_DIRICHLET, BC_NEUMANN, BC_NEUMANN,
@@ -9,6 +10,12 @@ let
   (verts, EToV, EToF, FToB, EToBlock) = read_inp_2d("meshes/square_circle.inp";
                                                     bc_map = bc_map)
 
+  # number of elements and faces
+  (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
+  @show (nelems, nfaces)
+
+  # This is needed to fix up points that should be on the boundary of the
+  # circle, but the mesh didn't quite put them there
   for v in 1:size(verts, 2)
     x, y = verts[1, v], verts[2, v]
     if abs(hypot(x,y) - 1) < 1e-5
@@ -17,20 +24,16 @@ let
     end
   end
 
-  if typeof(verts) <: Tuple
-    verts = flatten_tuples(verts)
-    EToV  = flatten_tuples(EToV)
-    EToF  = flatten_tuples(EToF)
-  end
-  N1 = N0 = 16
+  # Demain size
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
   @show (Lx, Ly)
 
+  # Plot the original connectivity before mesh warping
+  plot_connectivity(verts, EToV)
 
-  # number of elements and faces
-  (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
-  @show (nelems, nfaces)
+  # This is the base mesh size in each dimension
+  N1 = N0 = 16
 
   EToN0 = zeros(Int64, 2, nelems)
   EToN0[1, :] .= N0
@@ -128,6 +131,7 @@ let
           error("fix me")
         end
       end
+
       xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s;
                                     e1=ex[1], e2=ex[2], e3=ex[3], e4=ex[4])
       yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s;
@@ -136,6 +140,7 @@ let
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
     end
+    lvl == 1 && plot_blocks(lop)
 
     #
     # Assemble the global volume operators

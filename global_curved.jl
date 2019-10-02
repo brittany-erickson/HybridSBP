@@ -1,5 +1,6 @@
 using SparseArrays
 using LinearAlgebra
+using UnicodePlots
 
 include("diagonal_sbp.jl")
 
@@ -394,6 +395,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
   # Modify the operator to handle the boundary conditions
+  bctype=(BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE)
   if !isempty(LFToB)
     F = (F1, F2, F3, F4)
     τ = (τ1, τ2, τ3, τ4)
@@ -408,6 +410,7 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
         error("invalid bc")
       end
     end
+    bctype=(LFToB[1], LFToB[2], LFToB[3], LFToB[4])
   end
 
   # (E, V) = eigen(Matrix(M̃))
@@ -423,7 +426,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
    ny = (ny1, ny2, ny3, ny4),
    Hf = (H1, H2, H3, H4),
    HfI = (H1I, H2I, H3I, H4I),
-   τ = (τ1, τ2, τ3, τ4))
+   τ = (τ1, τ2, τ3, τ4),
+   bctype=bctype)
 end
 #}}}
 
@@ -575,12 +579,12 @@ function LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
   (M, FbarT, D, M.offset, FToλstarts)
 end
 
-function bcstarts(FToB, FToE, FToLF, bc_type, Nr, Ns)
+function bcstarts(FToB, FToE, FToLF, bctype, Nr, Ns)
   nfaces = length(FToB)
   bcstarts = Array{Int64, 1}(undef, nfaces + 1)
   bcstarts[1] = 1
   for f = 1:nfaces
-    if FToB[f] ∈ bc_type
+    if FToB[f] ∈ bctype
       e  = FToE[1,f]
       lf = FToLF[1,f]
       bcstarts[f+1] = bcstarts[f] + (lf ∈ (1,2) ? Ns[e] : Nr[e]) + 1
@@ -825,3 +829,71 @@ function SeekToSubstring(lines, substring; first=1)
 end
 
 # }}}
+
+function plot_connectivity(verts, EToV)
+  Lx = extrema(verts[1,:])
+  Lx = (floor(Int, Lx[1]), ceil(Int, Lx[2]))
+  Ly = extrema(verts[2,:])
+  Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
+  plt = Plot(BrailleCanvas(80, 40,
+                           origin_x = Lx[1], origin_y = Ly[1], 
+                           width = Lx[2] - Lx[1], height = Lx[2] - Lx[1]))
+
+
+  annotate!(plt, :l, nrows(plt.graphics), string(Ly[1]), color = :light_black)
+  annotate!(plt, :l, 1, string(Ly[2]), color = :light_black)
+  annotate!(plt, :bl, string(Lx[1]), color = :light_black)
+  annotate!(plt, :br, string(Lx[2]), color = :light_black)
+  for e = 1:size(EToV, 2)
+    (v1, v2, v3, v4) = EToV[1:4, e]
+    x = verts[1, [v1 v2 v4 v3 v1]][:]
+    y = verts[2, [v1 v2 v4 v3 v1]][:]
+    lineplot!(plt, x, y)
+  end
+  title!(plt, "connectivity")
+  display(plt)
+end
+
+function plot_blocks(lop)
+  Lx = (floatmax(), -floatmax())
+  Ly = (floatmax(), -floatmax())
+  for e = 1:length(lop)
+    (x, y) = lop[e].coord
+    Lxe = extrema(x)
+    Lye = extrema(x)
+    Lx = (min(Lx[1], Lxe[1]), max(Lx[2], Lxe[2]))
+    Ly = (min(Ly[1], Lye[1]), max(Ly[2], Lye[2]))
+  end
+
+  Lx = (floor(Int, Lx[1]), ceil(Int, Lx[2]))
+  Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
+
+  plt = Plot(BrailleCanvas(80, 40,
+                           origin_x = Lx[1], origin_y = Ly[1], 
+                           width = Lx[2] - Lx[1], height = Lx[2] - Lx[1]))
+
+
+  annotate!(plt, :l, nrows(plt.graphics), string(Ly[1]), color = :light_black)
+  annotate!(plt, :l, 1, string(Ly[2]), color = :light_black)
+  annotate!(plt, :bl, string(Lx[1]), color = :light_black)
+  annotate!(plt, :br, string(Lx[2]), color = :light_black)
+
+  for e = 1:length(lop)
+    (x, y) = lop[e].coord
+    L = lop[e].L
+    bctype = lop[e].bctype
+    for f = 1:length(L)
+      if bctype[f] == BC_LOCKED_INTERFACE
+        lineplot!(plt, L[f] * x, L[f] * y, color=:blue)
+      elseif bctype[f] == BC_DIRICHLET
+        lineplot!(plt, L[f] * x, L[f] * y, color=:green)
+      elseif bctype[f] == BC_DIRICHLET
+        lineplot!(plt, L[f] * x, L[f] * y, color=:yellow)
+      else
+        lineplot!(plt, L[f] * x, L[f] * y, color=:red)
+      end
+    end
+  end
+  title!(plt, "mesh")
+  display(plt)
+end
