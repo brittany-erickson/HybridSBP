@@ -139,7 +139,7 @@ function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
 
   # variable coefficient matrix components
   crr = J .* (rx .* rx + ry .* ry)
-  crs = csr = J .* (sx .* rx + sy .* ry)
+  crs = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
 
   #
@@ -176,21 +176,22 @@ function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
 
   (coord = (x,y),
    facecoord = ((xf1, xf2, xf3, xf4), (yf1, yf2, yf3, yf4)),
-   crr = crr, css = css, crs = crs, csr = csr,
+   crr = crr, css = css, crs = crs,
    J=J,
    sJ = (sJ1, sJ2, sJ3, sJ4),
    nx = (nx1, nx2, nx3, nx4),
-   ny = (ny1, ny2, ny3, ny4))
+   ny = (ny1, ny2, ny3, ny4),
+   rx = rx, ry = ry, sx = sx, sy = sy)
 end
 
 function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
                      LFToB = (BC_DIRICHLET, BC_DIRICHLET,
                               BC_DIRICHLET, BC_DIRICHLET),
-                     τscale = 2)
-  crr = metrics.crr
-  css = metrics.css
-  crs = metrics.crs
-  csr = metrics.csr
+                     τscale = 2;
+                     crr = metrics.crr,
+                     css = metrics.css,
+                     crs = metrics.crs)
+  csr = crs
   J = metrics.J
 
   Nrp = Nr + 1

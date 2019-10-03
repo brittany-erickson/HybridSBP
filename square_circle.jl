@@ -7,8 +7,8 @@ let
   # mesh file side set type to actually boundary condition type
   bc_map = [BC_DIRICHLET, BC_DIRICHLET, BC_NEUMANN, BC_NEUMANN,
             BC_JUMP_INTERFACE]
-  (verts, EToV, EToF, FToB, EToBlock) = read_inp_2d("meshes/square_circle.inp";
-                                                    bc_map = bc_map)
+  (verts, EToV, EToF, FToB, EToDomain) = read_inp_2d("meshes/square_circle.inp";
+                                                     bc_map = bc_map)
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
@@ -24,10 +24,6 @@ let
     end
   end
 
-  # Demain size
-  Lx = maximum(verts[1,:])
-  Ly = maximum(abs.(verts[2,:]))
-  @show (Lx, Ly)
 
   # Plot the original connectivity before mesh warping
   plot_connectivity(verts, EToV)
@@ -52,29 +48,31 @@ let
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # Exact solution
+  Lx = maximum(verts[1,:])
+  Ly = maximum(abs.(verts[2,:]))
   (kx, ky) = (4*π / Lx, 4*π / Ly)
   vex(x,y,e) = begin
-    if EToBlock[e] == 1
+    if EToDomain[e] == 1
       return cos.(kx * x) .* cosh.(ky * y)
-    elseif EToBlock[e] == 2
+    elseif EToDomain[e] == 2
       return 10 .+ cos.(kx * x) .* cosh.(ky * y)
     else
       error("invalid block")
     end
   end
   vex_x(x,y,e) = begin
-    if EToBlock[e] == 1
+    if EToDomain[e] == 1
       return -kx * sin.(kx * x) .* cosh.(ky * y)
-    elseif EToBlock[e] == 2
+    elseif EToDomain[e] == 2
       return -kx * sin.(kx * x) .* cosh.(ky * y)
     else
       error("invalid block")
     end
   end
   vex_y(x,y,e) = begin
-    if EToBlock[e] == 1
+    if EToDomain[e] == 1
       return ky * cos.(kx * x) .* sinh.(ky * y)
-    elseif EToBlock[e] == 2
+    elseif EToDomain[e] == 2
       return ky * cos.(kx * x) .* sinh.(ky * y)
     else
       error("invalid block")
