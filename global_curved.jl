@@ -98,23 +98,14 @@ end
 #}}}
 
 #{{{ locoperator
-function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
+function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp
 
   # Derivative operators for the metric terms
-  (DrM, _, _, _) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
-  (DsM, _, _, _) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
-
-  # Derivative operators for the rest of the computation
-  (Dr, HrI, Hr, r) = diagonal_sbp_D1(p, Nr; xc = (-1,1))
-  Qr = Hr * Dr
-  QrT = sparse(transpose(Qr))
-
-  (Ds, HsI, Hs, s) = diagonal_sbp_D1(p, Ns; xc = (-1,1))
-  Qs = Hs * Ds
-  QsT = sparse(transpose(Qs))
+  (DrM, _, _, r) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
+  (DsM, _, _, s) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
 
   # Identity matrices for the comuptation
   Ir = sparse(I, Nrp, Nrp)
@@ -130,6 +121,14 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   yr = (Is ⊗ DrM) * y
   ys = (DsM ⊗ Ir) * y
 
+  x = reshape(x, Nrp, Nsp)
+  y = reshape(y, Nrp, Nsp)
+
+  xr = reshape(xr, Nrp, Nsp)
+  yr = reshape(yr, Nrp, Nsp)
+  xs = reshape(xs, Nrp, Nsp)
+  ys = reshape(ys, Nrp, Nsp)
+
   J = xr .* ys - xs .* yr
   @assert minimum(J) > 0
 
@@ -142,6 +141,74 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   crr = J .* (rx .* rx + ry .* ry)
   crs = csr = J .* (sx .* rx + sy .* ry)
   css = J .* (sx .* sx + sy .* sy)
+
+  #
+  # Block surface matrices
+  #
+  (xf1, yf1) = (view(x, 1, :), view(y, 1, :))
+  nx1 = -ys[1, :]
+  ny1 =  xs[1, :]
+  sJ1 = hypot.(nx1, ny1)
+  nx1 = nx1 ./ sJ1
+  ny1 = ny1 ./ sJ1
+
+  (xf2, yf2) = (view(x, Nrp, :), view(y, Nrp, :))
+  nx2 =  ys[end, :]
+  ny2 = -xs[end, :]
+  sJ2 = hypot.(nx2, ny2)
+  nx2 = nx2 ./ sJ2
+  ny2 = ny2 ./ sJ2
+
+  (xf3, yf3) = (view(x, :, 1), view(y, :, 1))
+  nx3 =  yr[:, 1]
+  ny3 = -xr[:, 1]
+  sJ3 = hypot.(nx3, ny3)
+  nx3 = nx3 ./ sJ3
+  ny3 = ny3 ./ sJ3
+
+  (xf4, yf4) = (view(x, :, Nsp), view(y, :, Nsp))
+  nx4 = -yr[:, end]
+  ny4 =  xr[:, end]
+  sJ4 = hypot.(nx4, ny4)
+  nx4 = nx4 ./ sJ4
+  ny4 = ny4 ./ sJ4
+
+
+  (coord = (x,y),
+   facecoord = ((xf1, xf2, xf3, xf4), (yf1, yf2, yf3, yf4)),
+   crr = crr, css = css, crs = crs, csr = csr,
+   J=J,
+   sJ = (sJ1, sJ2, sJ3, sJ4),
+   nx = (nx1, nx2, nx3, nx4),
+   ny = (ny1, ny2, ny3, ny4))
+end
+
+function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
+                     LFToB = (BC_DIRICHLET, BC_DIRICHLET,
+                              BC_DIRICHLET, BC_DIRICHLET),
+                     τscale = 2)
+  crr = metrics.crr
+  css = metrics.css
+  crs = metrics.crs
+  csr = metrics.csr
+  J = metrics.J
+
+  Nrp = Nr + 1
+  Nsp = Ns + 1
+  Np = Nrp * Nsp
+
+  # Derivative operators for the rest of the computation
+  (Dr, HrI, Hr, r) = diagonal_sbp_D1(p, Nr; xc = (-1,1))
+  Qr = Hr * Dr
+  QrT = sparse(transpose(Qr))
+
+  (Ds, HsI, Hs, s) = diagonal_sbp_D1(p, Ns; xc = (-1,1))
+  Qs = Hs * Ds
+  QsT = sparse(transpose(Qs))
+
+  # Identity matrices for the comuptation
+  Ir = sparse(I, Nrp, Nrp)
+  Is = sparse(I, Nsp, Nsp)
 
   #{{{ Set up the rr derivative matrix
   ISr0 = Array{Int64,1}(undef,0)
@@ -256,8 +323,8 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   #}}}
 
   #{{{ Set up the sr and rs derivative matrices
-  Ãsr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), crs) * (Is ⊗ Qr)
-  Ãrs = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), csr) * (Qs ⊗ Ir)
+  Ãsr = (QsT ⊗ Ir) * sparse(1:length(crs), 1:length(crs), view(crs, :)) * (Is ⊗ Qr)
+  Ãrs = (Is ⊗ QrT) * sparse(1:length(csr), 1:length(csr), view(csr, :)) * (Qs ⊗ Ir)
   #}}}
 
   Ã = Ãrr + Ãss + Ãrs + Ãsr
@@ -280,11 +347,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   es0T = sparse([1], [1  ], [1], 1, Nsp)
   esNT = sparse([1], [Nsp], [1], 1, Nsp)
 
-  L1 = (Is ⊗ er0T)
-  L2 = (Is ⊗ erNT)
-  L3 = (es0T ⊗ Ir)
-  L4 = (esNT ⊗ Ir)
-
   #
   # Store coefficient matrices as matrices
   #
@@ -294,37 +356,17 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
   csrN = sparse(Diagonal(csr[Nrp .+ Nrp*(0:Ns)]))
 
   #
-  # Block surface matrices
+  # Surface mass matrices
   #
-  nx1 = -L1 * ys
-  ny1 =  L1 * xs
-  sJ1 = hypot.(nx1, ny1)
-  nx1 = nx1 ./ sJ1
-  ny1 = ny1 ./ sJ1
   H1 = Hs
   H1I = HsI
 
-  nx2 =  L2 * ys
-  ny2 = -L2 * xs
-  sJ2 = hypot.(nx2, ny2)
-  nx2 = nx2 ./ sJ2
-  ny2 = ny2 ./ sJ2
   H2 = Hs
   H2I = HsI
 
-  nx3 =  L3 * yr
-  ny3 = -L3 * xr
-  sJ3 = hypot.(nx3, ny3)
-  nx3 = nx3 ./ sJ3
-  ny3 = ny3 ./ sJ3
   H3 = Hr
   H3I = HrI
 
-  nx4 = -L4 * yr
-  ny4 =  L4 * xr
-  sJ4 = hypot.(nx4, ny4)
-  nx4 = nx4 ./ sJ4
-  ny4 = ny4 ./ sJ4
   H4 = Hr
   H4I = HrI
 
@@ -347,10 +389,6 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
     error("unknown order")
   end
 
-  crr = reshape(crr, Nrp, Nsp)
-  css = reshape(css, Nrp, Nsp)
-  crs = reshape(crs, Nrp, Nsp)
-  csr = reshape(csr, Nrp, Nsp)
   ψmin = reshape((crr + css - sqrt.((crr - css).^2 + 4crs.^2)) / 2, Nrp, Nsp)
 
   hr = 2 / Nr
@@ -396,34 +434,32 @@ function locoperator(p, Nr, Ns, xf, yf; pm = p+2, LFToB = [], τscale = 2)
 
   # Modify the operator to handle the boundary conditions
   bctype=(BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE)
-  if !isempty(LFToB)
-    F = (F1, F2, F3, F4)
-    τ = (τ1, τ2, τ3, τ4)
-    HfI = (H1I, H2I, H3I, H4I)
-    # Modify operators for the BC
-    for lf = 1:4
-      if LFToB[lf] == BC_NEUMANN
-        M̃ -= F[lf] * (Diagonal(1 ./ (diag(τ[lf]))) * HfI[lf]) * F[lf]'
-      elseif !(LFToB[lf] == BC_DIRICHLET ||
-               LFToB[lf] == BC_LOCKED_INTERFACE ||
-               LFToB[lf] >= BC_JUMP_INTERFACE)
-        error("invalid bc")
-      end
+  F = (F1, F2, F3, F4)
+  τ = (τ1, τ2, τ3, τ4)
+  HfI = (H1I, H2I, H3I, H4I)
+  # Modify operators for the BC
+  for lf = 1:4
+    if LFToB[lf] == BC_NEUMANN
+      M̃ -= F[lf] * (Diagonal(1 ./ (diag(τ[lf]))) * HfI[lf]) * F[lf]'
+    elseif !(LFToB[lf] == BC_DIRICHLET ||
+             LFToB[lf] == BC_LOCKED_INTERFACE ||
+             LFToB[lf] >= BC_JUMP_INTERFACE)
+      error("invalid bc")
     end
-    bctype=(LFToB[1], LFToB[2], LFToB[3], LFToB[4])
   end
+  bctype=(LFToB[1], LFToB[2], LFToB[3], LFToB[4])
 
   # (E, V) = eigen(Matrix(M̃))
   # println((minimum(E), maximum(E)))
-  JH = sparse(1:Np, 1:Np, J) * (Hs ⊗ Hr)
+  JH = sparse(1:Np, 1:Np, view(J, :)) * (Hs ⊗ Hr)
   (M̃ = M̃,
    F = (F1, F2, F3, F4),
-   L = (L1, L2, L3, L4),
-   coord = (x, y),
+   coord = metrics.coord,
+   facecoord = metrics.facecoord,
    JH = JH,
-   sJ = (sJ1, sJ2, sJ3, sJ4),
-   nx = (nx1, nx2, nx3, nx4),
-   ny = (ny1, ny2, ny3, ny4),
+   sJ = metrics.sJ,
+   nx = metrics.nx,
+   ny = metrics.ny,
    Hf = (H1, H2, H3, H4),
    HfI = (H1I, H2I, H3I, H4I),
    τ = (τ1, τ2, τ3, τ4),
@@ -493,9 +529,8 @@ end
 #{{{ volbcarray()
 function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
-  L = lop.L
   F = lop.F
-  (x, y) = lop.coord
+  (xf, yf) = lop.facecoord
   Hf = lop.Hf
   sJ = lop.sJ
   nx = lop.nx
@@ -503,17 +538,16 @@ function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
   τ = lop.τ
   ge[:] .= 0
   for lf = 1:4
-    (xf, yf) = (L[lf] * x, L[lf] * y)
     if LFToB[lf] == BC_DIRICHLET
-      vf = bc_Dirichlet(lf, xf, yf, bcargs...)
+      vf = bc_Dirichlet(lf, xf[lf], yf[lf], bcargs...)
     elseif LFToB[lf] == BC_NEUMANN
-      gN = bc_Neumann(lf, xf, yf, nx[lf], ny[lf], bcargs...)
+      gN = bc_Neumann(lf, xf[lf], yf[lf], nx[lf], ny[lf], bcargs...)
       vf = sJ[lf] .* gN ./ diag(τ[lf])
     elseif LFToB[lf] == BC_LOCKED_INTERFACE
       continue # nothing to do here
     elseif LFToB[lf] >= BC_JUMP_INTERFACE
       # In this case we need to add in half the jump
-      vf = in_jump(lf, xf, yf, bcargs...) / 2
+      vf = in_jump(lf, xf[lf], yf[lf], bcargs...) / 2
       gδe[lf][:] -= Hf[lf] * τ[lf] * vf
     else
       error("invalid bc")
@@ -559,8 +593,8 @@ function SBPLocalOperator1(lop, Nr, Ns, factorization)
 
     # global coordinates and element number array (needed for jump)
     (x,y) = lop[e].coord
-    X = [X;x]
-    Y = [Y;y]
+    X = [X;x[:]]
+    Y = [Y;y[:]]
     E = [E;e * ones(Int64, Np[e])]
 
     factors[e] = factorization(lop[e].M̃)
@@ -879,18 +913,17 @@ function plot_blocks(lop)
   annotate!(plt, :br, string(Lx[2]), color = :light_black)
 
   for e = 1:length(lop)
-    (x, y) = lop[e].coord
-    L = lop[e].L
+    (xf, yf) = lop[e].facecoord
     bctype = lop[e].bctype
-    for f = 1:length(L)
-      if bctype[f] == BC_LOCKED_INTERFACE
-        lineplot!(plt, L[f] * x, L[f] * y, color=:blue)
-      elseif bctype[f] == BC_DIRICHLET
-        lineplot!(plt, L[f] * x, L[f] * y, color=:green)
-      elseif bctype[f] == BC_DIRICHLET
-        lineplot!(plt, L[f] * x, L[f] * y, color=:yellow)
+    for lf = 1:length(xf)
+      if bctype[lf] == BC_LOCKED_INTERFACE
+        lineplot!(plt, xf[lf], yf[lf], color=:blue)
+      elseif bctype[lf] == BC_DIRICHLET
+        lineplot!(plt, xf[lf], yf[lf], color=:green)
+      elseif bctype[lf] == BC_DIRICHLET
+        lineplot!(plt, xf[lf], yf[lf], color=:yellow)
       else
-        lineplot!(plt, L[f] * x, L[f] * y, color=:red)
+        lineplot!(plt, xf[lf], yf[lf], color=:red)
       end
     end
   end

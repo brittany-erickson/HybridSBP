@@ -92,7 +92,7 @@ let
     #
 
     # Dictionary to store the operators
-    OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
+    OPTYPE = typeof(locoperator(2, 8, 8))
     lop = Dict{Int64, OPTYPE}()
 
     # Loop over blocks and create local operators
@@ -144,8 +144,10 @@ let
       yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s;
                                     e1=ey[1], e2=ey[2], e3=ey[3], e4=ey[4])
 
+      metrics = create_metrics(SBPp, Nr[e], Ns[e], xt, yt)
+
       # Build local operators
-      lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
+      lop[e] = locoperator(SBPp, Nr[e], Ns[e], metrics, FToB[EToF[:, e]])
     end
 
     # If this is the first mesh level plot the mesh
@@ -179,12 +181,9 @@ let
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
         (lf1, lf2) = FToLF[:, f]
-        (x, y) = lop[e1].coord
-        L = lop[e1].L
-        xf = L[lf1] * x
-        yf = L[lf1] * y
+        (xf, yf) = lop[e1].facecoord
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] =
-            vex(xf, yf, e2) - vex(xf, yf, e1)
+          vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
       end
     end
 
@@ -231,7 +230,6 @@ let
       end
     end
     LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts, lockedblock)
-    #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 
     u[:] = -FbarT' * λ
@@ -248,7 +246,8 @@ let
             (@view u[vstarts[e]:(vstarts[e+1]-1)]))
       =#
 
-      @views Δ[vstarts[e]:(vstarts[e+1]-1)] = u[vstarts[e]:(vstarts[e+1]-1)] - vex(x, y, e)
+      @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
+                                               vex(x[:], y[:], e))
       ϵ[lvl] += Δ[vstarts[e]:(vstarts[e+1]-1)]' * JH * Δ[vstarts[e]:(vstarts[e+1]-1)]
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
