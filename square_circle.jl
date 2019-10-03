@@ -35,6 +35,7 @@ let
   # This is the base mesh size in each dimension
   N1 = N0 = 16
 
+  # EToN0 is the base mesh size (e.g., before refinement)
   EToN0 = zeros(Int64, 2, nelems)
   EToN0[1, :] .= N0
   EToN0[2, :] .= N1
@@ -93,12 +94,14 @@ let
     # Dictionary to store the operators
     OPTYPE = typeof(locoperator(2, 8, 8, (r,s)->r, (r,s)->s))
     lop = Dict{Int64, OPTYPE}()
+
+    # Loop over blocks and create local operators
     for e = 1:nelems
-      # @show (e, nelems)
       # Get the element corners
       (x1, x2, x3, x4) = verts[1, EToV[:, e]]
       (y1, y2, y3, y4) = verts[2, EToV[:, e]]
 
+      # Initialize the block transformations as transfinite between the corners
       ex = [(α) -> x1 * (1 .- α) / 2 + x3 * (1 .+ α) / 2,
             (α) -> x2 * (1 .- α) / 2 + x4 * (1 .+ α) / 2,
             (α) -> x1 * (1 .- α) / 2 + x2 * (1 .+ α) / 2,
@@ -107,11 +110,13 @@ let
             (α) -> y2 * (1 .- α) / 2 + y4 * (1 .+ α) / 2,
             (α) -> y1 * (1 .- α) / 2 + y2 * (1 .+ α) / 2,
             (α) -> y3 * (1 .- α) / 2 + y4 * (1 .+ α) / 2]
+
+      # For blocks on the circle, put in the curved edge transform
       if FToB[EToF[1, e]] == BC_JUMP_INTERFACE
-          error("fix me")
+          error("curved face 1 not implemented yet")
       end
       if FToB[EToF[2, e]] == BC_JUMP_INTERFACE
-          error("fix me")
+          error("curved face 2 not implemented yet")
       end
       if FToB[EToF[3, e]] == BC_JUMP_INTERFACE
         Q1 = atan(y1, x1)
@@ -128,10 +133,12 @@ let
         ex[4] = (α) -> cos.(Q3 * (1 .- α) / 2 + Q4 * (1 .+ α) / 2)
         ey[4] = (α) -> sin.(Q3 * (1 .- α) / 2 + Q4 * (1 .+ α) / 2)
         if !(-π/2 < Q3 - Q4 < π/2)
-          error("fix me")
+          error("curved face 4 angle correction not implemented yet")
         end
       end
 
+      # Create the volume transform as the transfinite blending of the edge
+      # transformations
       xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s;
                                     e1=ex[1], e2=ex[2], e3=ex[3], e4=ex[4])
       yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s;
@@ -140,14 +147,16 @@ let
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])
     end
+
+    # If this is the first mesh level plot the mesh
     lvl == 1 && plot_blocks(lop)
 
     #
-    # Assemble the global volume operators
+    # Do some assemble of the global volume operators
     #
     (M, FbarT, D, vstarts, FToλstarts) =
-    LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                         (x) -> cholesky(Symmetric(x)))
+      LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                           (x) -> cholesky(Symmetric(x)))
     locfactors = M.F
 
     # Get a unique array indexes for the face to jumps map
