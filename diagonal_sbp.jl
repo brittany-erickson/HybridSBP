@@ -1,3 +1,5 @@
+using SparseArrays
+
 # DIAGONAL_SBP_D1 creates a diagonal norm SBP operator
 # (D, Hinv, H, r) = diagonal_sbp_D1(p, N; xc = (-1,1))
 #
