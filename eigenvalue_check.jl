@@ -9,10 +9,10 @@ import PGFPlots
 # This checks that the local solve is positive definite with random variable
 # coefficients
 let
-  τs = 1/2
+  τs = 1
 
   # Size of the grid
-  Nr = Ns = 3 .* (3, 5, 7)
+  Nr = Ns = 3 .* (3, 5, 7) .- 1
   SBP_orders = (2, 4, 6)
 
   # Create the random variable coefficients
@@ -30,7 +30,7 @@ let
     for (i, SBPp) in enumerate(SBP_orders)
       # Build coefficients which are positive definite
       λ1 = rand(Nr[i]+1, Ns[i]+1)
-      λ2 = rand(Nr[i]+1, Ns[i]+1)
+      λ2 = rand(Nr[i]+1, Ns[i]+1) / 10000
 
       q  = π * rand(Nr[i]+1, Ns[i]+1)
       @. crr[i] = λ1 * cos(q)^2 + λ2 * sin(q)^2
@@ -110,7 +110,7 @@ end
 # coefficients
 let
   # Size of the grid
-  Nr = Ns = 3 .* (3, 5, 7)
+  Nr = Ns = 3 .* (3, 5, 7) .- 1
   SBP_orders = (2, 4, 6)
 
   # Create the random variable coefficients
@@ -136,8 +136,9 @@ let
     @. crs[i] = (λ2 - λ1) * cos(q) * sin(q)
   end
 
-  τscales = 1:10:100
+  τscales = range(0.;stop=2, length=10)
   max_eig = zeros(length(SBP_orders), length(τscales))
+  min_eig = zeros(length(SBP_orders), length(τscales))
 
   for (k, τs) in enumerate(τscales)
     k % 10 == 1 && println("sample $k of $(length(τscales))")
@@ -146,16 +147,16 @@ let
       lop = locoperator(SBPp, Nr[i], Ns[i], metrics[i]; τscale = τs)
       eigs = eigen(Matrix(lop.M̃))
       max_eig[i,k] = maximum(eigs.values)
+      min_eig[i,k] = minimum(eigs.values)
     end
   end
 
-  Lx = (1, τscales[end])
-  Ly = extrema(max_eig)
+  Lx = (τscales[1], τscales[end])
+  Ly = extrema(real.(max_eig))
   Ly = (floor(Ly[1]), ceil(Ly[2]))
   plt_max = Plot(BrailleCanvas(40, 20,
                                origin_x = Lx[1], origin_y = Ly[1], 
                                width = Lx[2] - Lx[1], height = Ly[2] - Ly[1]))
-
 
   annotate!(plt_max, :l, nrows(plt_max.graphics), string(Ly[1]), color = :light_black)
   annotate!(plt_max, :l, 1, string(Ly[2]), color = :light_black)
@@ -166,7 +167,7 @@ let
   end
   display(plt_max)
 
-  pgf_axis = PGFPlots.Axis(style="width=10cm, height=5cm",
+  pgf_axis = PGFPlots.Axis(style="width=5cm, height=5cm",
                            legendPos="north west",
                            xlabel=PGFPlots.L"$\tau_{s}$",
                            ylabel=PGFPlots.L"$\max \lambda$",
@@ -177,5 +178,34 @@ let
                                     style="no marks, thick",
                                     legendentry = "order = $SBPp"))
   end
-  PGFPlots.save("tau_scaling_eigenvalues.tikz", pgf_axis)
+  PGFPlots.save("tau_scaling_max_eig.tikz", pgf_axis)
+
+  Lx = (τscales[1], τscales[end])
+  Ly = extrema(min_eig)
+  Ly = (floor(1000*Ly[1])/1000, ceil(1000*Ly[2])/1000)
+  plt_max = Plot(BrailleCanvas(40, 20,
+                               origin_x = Lx[1], origin_y = Ly[1], 
+                               width = Lx[2] - Lx[1], height = Ly[2] - Ly[1]))
+
+  annotate!(plt_max, :l, nrows(plt_max.graphics), string(Ly[1]), color = :light_black)
+  annotate!(plt_max, :l, 1, string(Ly[2]), color = :light_black)
+  annotate!(plt_max, :bl, string(Lx[1]), color = :light_black)
+  annotate!(plt_max, :br, string(Lx[2]), color = :light_black)
+  for (i, SBPp) = enumerate(SBP_orders)
+    lineplot!(plt_max, τscales, min_eig[i,:])
+  end
+  display(plt_max)
+
+  pgf_axis = PGFPlots.Axis(style="width=5cm, height=5cm",
+                           legendPos="north west",
+                           xlabel=PGFPlots.L"$\tau_{s}$",
+                           ylabel=PGFPlots.L"$\max \lambda$",
+                           xmin = τscales[1],
+                           xmax = τscales[end])
+  for (i, SBPp) = enumerate(SBP_orders)
+    push!(pgf_axis, PGFPlots.Linear(τscales, min_eig[i, :],
+                                    style="no marks, thick",
+                                    legendentry = "order = $SBPp"))
+  end
+  PGFPlots.save("tau_scaling_min_eig.tikz", pgf_axis)
 end

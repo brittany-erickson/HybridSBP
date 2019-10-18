@@ -237,8 +237,6 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   for j = 1:Nsp
     rng = (j-1) * Nrp .+ (1:Nrp)
     (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Nr, crr[rng])
-    eigs = eigen(Matrix(Ae))
-    minimum(eigs.values) < -1e-14 && @show extrema(eigs.values)
     (Ie, Je, Ve) = findnz(Ae)
     IArr[stArr .+ (1:length(Ve))] = Ie .+ (j-1) * Nrp
     JArr[stArr .+ (1:length(Ve))] = Je .+ (j-1) * Nrp
@@ -292,9 +290,6 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
     rng = i .+ Nrp * (0:Ns)
     (_, S0e, SNe, _, _, Ae, _) = variable_diagonal_sbp_D2(p, Ns, css[rng])
     R = Ae - Dr' * Hr * Diagonal(css[rng]) * Dr
-    eigs = eigen(Matrix(R))
-    v = real.(eigs.values)
-    minimum(v) < -1e-14 && @show extrema(v)
 
     (Ie, Je, Ve) = findnz(Ae)
     IAss[stAss .+ (1:length(Ve))] = i .+ Nrp * (Ie .- 1)
@@ -389,7 +384,7 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
     β = 0.2505765857
     α = 17 / 48
   elseif p == 6
-    l = 14
+    l = 7
     β = 0.1878687080
     α = 13649 / 43200
   else
