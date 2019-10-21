@@ -136,7 +136,7 @@ let
     @. crs[i] = (λ2 - λ1) * cos(q) * sin(q)
   end
 
-  τscales = range(0.;stop=2, length=10)
+  τscales = exp10.(range(-2.;stop=2, length=100))
   max_eig = zeros(length(SBP_orders), length(τscales))
   min_eig = zeros(length(SBP_orders), length(τscales))
 
@@ -170,7 +170,7 @@ let
   pgf_axis = PGFPlots.Axis(style="width=5cm, height=5cm",
                            legendPos="north west",
                            xlabel=PGFPlots.L"$\tau_{s}$",
-                           ylabel=PGFPlots.L"$\max \lambda$",
+                           ylabel=PGFPlots.L"$\min \lambda$",
                            xmin = τscales[1],
                            xmax = τscales[end])
   for (i, SBPp) = enumerate(SBP_orders)
