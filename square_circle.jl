@@ -11,7 +11,8 @@ let
                                                      bc_map = bc_map)
   # EToV defines the element by its vertices
   # EToF defines element by its four faces, in global face number
-  # FToB defines whether face is Dirichlet (1), Neumann (2), interior jump (7) or just an interior interface (0)
+  # FToB defines whether face is Dirichlet (1), Neumann (2), interior jump (7)
+  #      or just an interior interface (0)
   # EToDomain is 1 if element is inside circle; 2 otherwise
 
   # number of elements and faces
@@ -45,10 +46,19 @@ let
   @assert maximum(maximum(EToF)) == nfaces
 
   # Determine secondary arrays
-  # FToE : Unique Global Face to Element Number            (the i'th column of this stores the element numbers that share the global face number i)
-  # FToLF: Unique Global Face to Element local face number (the i'th column of this stores the element local face numbers that shares the global face number i)
-  # EToO : Element to Unique Global Faces Orientation      (not sure)
-  # EToS : Element to Unique Global Face Side              (not sure)
+  # FToE : Unique Global Face to Element Number
+  #        (the i'th column of this stores the element numbers that share the
+  #        global face number i)
+  # FToLF: Unique Global Face to Element local face number
+  #        (the i'th column of this stores the element local face numbers that
+  #        shares the global face number i)
+  # EToO : Element to Unique Global Faces Orientation
+  #        (the i'th column of this stores the whether the element and global
+  #        face are oriented in the same way in physical memory or need to be
+  #        rotated)
+  # EToS : Element to Unique Global Face Side
+  #        (the i'th column of this stores whether an element face is on the
+  #        plus side or minus side of the global face)
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # Exact solution
