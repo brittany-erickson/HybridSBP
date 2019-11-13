@@ -48,7 +48,7 @@ let
   # FToE : Unique Global Face to Element Number            (the i'th column of this stores the element numbers that share the global face number i)
   # FToLF: Unique Global Face to Element local face number (the i'th column of this stores the element local face numbers that shares the global face number i)
   # EToO : Element to Unique Global Faces Orientation      (not sure)
-  # EToS : Element to Unique Global Face Side	           (not sure)
+  # EToS : Element to Unique Global Face Side              (not sure)
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # Exact solution
@@ -101,7 +101,7 @@ let
     end
   end
 
-    vex_yy(x,y,e) = begin
+  vex_yy(x,y,e) = begin
     if EToDomain[e] == 1
       return ky^2 * cos.(kx * x) .* cosh.(ky * y)
     elseif EToDomain[e] == 2
@@ -147,10 +147,10 @@ let
 
       # For blocks on the circle, put in the curved edge transform
       if FToB[EToF[1, e]] == BC_JUMP_INTERFACE
-          error("curved face 1 not implemented yet")
+        error("curved face 1 not implemented yet")
       end
       if FToB[EToF[2, e]] == BC_JUMP_INTERFACE
-          error("curved face 2 not implemented yet")
+        error("curved face 2 not implemented yet")
       end
       if FToB[EToF[3, e]] == BC_JUMP_INTERFACE
         Q1 = atan(y1, x1)
@@ -190,10 +190,10 @@ let
     #
     # Do some assemble of the global volume operators
     #
-    
+
     (M, FbarT, D, vstarts, FToλstarts) =
-      LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                           (x) -> cholesky(Symmetric(x)))
+    LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                         (x) -> cholesky(Symmetric(x)))
     @show lvl
     locfactors = M.F
 
@@ -219,7 +219,7 @@ let
         (lf1, lf2) = FToLF[:, f]
         (xf, yf) = lop[e1].facecoord
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] =
-          vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
+        vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
       end
     end
 
@@ -260,7 +260,7 @@ let
     end
 
 
-									
+
 
     lockedblock = Array{Bool, 1}(undef, nelems)
     for e = 1:nelems
@@ -277,7 +277,7 @@ let
     u[:] = -FbarT' * λ
     u[:] .= g .+ u
 
-  for e = 1:nelems
+    for e = 1:nelems
       F = locfactors[e]
       (x, y) = lop[e].coord
       JH = lop[e].JH
@@ -285,7 +285,7 @@ let
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-            (@view u[vstarts[e]:(vstarts[e+1]-1)]))
+      (@view u[vstarts[e]:(vstarts[e+1]-1)]))
       =#
 
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
