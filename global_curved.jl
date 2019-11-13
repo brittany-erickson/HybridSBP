@@ -911,7 +911,7 @@ function plot_blocks(lop)
   for e = 1:length(lop)
     (x, y) = lop[e].coord
     Lxe = extrema(x)
-    Lye = extrema(x)
+    Lye = extrema(y)
     Lx = (min(Lx[1], Lxe[1]), max(Lx[2], Lxe[2]))
     Ly = (min(Ly[1], Lye[1]), max(Ly[2], Lye[2]))
   end
