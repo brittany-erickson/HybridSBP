@@ -560,6 +560,20 @@ function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
 end
 #}}}
 
+
+#{{{ volsourcearray()
+function locsourcearray!(ge, source, lop, volargs = ())
+
+  (xloc, yloc) = lop.coord
+  JHloc = lop.JH
+  ge[:] += JHloc * source(xloc[:], yloc[:], volargs...)
+
+end
+
+#}}}
+
+
+
 #{{{
 struct SBPLocalOperator1{T<:Real, S<:Factorization}
   offset::Array{Int64,1}
