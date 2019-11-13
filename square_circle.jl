@@ -110,7 +110,6 @@ let
       error("invalid block")
     end
   end
-
   vex_yy(x,y,e) = begin
     if EToDomain[e] == 1
       return ky^2 * cos.(kx * x) .* cosh.(ky * y)
@@ -120,10 +119,6 @@ let
       error("invalid block")
     end
   end
-
-
-
-
 
   ϵ = zeros(4)
   for lvl = 1:length(ϵ)
@@ -200,10 +195,9 @@ let
     #
     # Do some assemble of the global volume operators
     #
-
     (M, FbarT, D, vstarts, FToλstarts) =
-    LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                         (x) -> cholesky(Symmetric(x)))
+      LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                           (x) -> cholesky(Symmetric(x)))
     @show lvl
     locfactors = M.F
 
@@ -229,7 +223,7 @@ let
         (lf1, lf2) = FToLF[:, f]
         (xf, yf) = lop[e1].facecoord
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] =
-        vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
+          vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
       end
     end
 
@@ -269,9 +263,6 @@ let
       locsourcearray!((@view g[vstarts[e]:vstarts[e+1]-1]), source, lop[e], e)
     end
 
-
-
-
     lockedblock = Array{Bool, 1}(undef, nelems)
     for e = 1:nelems
       if @views FToB[EToF[:,e]] == [BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE,
@@ -295,7 +286,7 @@ let
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-      (@view u[vstarts[e]:(vstarts[e+1]-1)]))
+            (@view u[vstarts[e]:(vstarts[e+1]-1)]))
       =#
 
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
