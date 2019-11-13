@@ -143,16 +143,7 @@ let
                   FToB[EToF[:,e]], bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
     end
 
-    lockedblock = Array{Bool, 1}(undef, nelems)
-    for e = 1:nelems
-      if @views FToB[EToF[:,e]] == [BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE,
-                                    BC_LOCKED_INTERFACE, BC_LOCKED_INTERFACE]
-        lockedblock[e] = true
-      else
-        lockedblock[e] = false
-      end
-    end
-    LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts, lockedblock)
+    LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts)
     #TODO: NEED TO fix for discontinuous τ
     λ[:] = BF \ bλ
 

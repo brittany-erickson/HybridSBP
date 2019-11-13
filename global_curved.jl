@@ -646,18 +646,10 @@ function bcstarts(FToB, FToE, FToLF, bctype, Nr, Ns)
   bcstarts
 end
 
-function LocalToGLobalRHS!(b, g, gδ, u, M, FbarT, vstarts, lockedblock)
+function LocalToGLobalRHS!(b, g, gδ, u, M, FbarT, vstarts)
   for e = 1:length(M)
-    if !lockedblock[e]
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
-                                                g[vstarts[e]:(vstarts[e+1]-1)])
-      #=
-      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), M[e],
-            (@view g[vstarts[e]:(vstarts[e+1]-1)]))
-      =#
-    else
-      @views u[vstarts[e]:(vstarts[e+1]-1)] .= 0
-    end
+    @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
+                                             g[vstarts[e]:(vstarts[e+1]-1)])
   end
   mul!(b, FbarT, u)
   @. b = gδ - b
