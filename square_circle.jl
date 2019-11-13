@@ -9,6 +9,10 @@ let
             BC_JUMP_INTERFACE]
   (verts, EToV, EToF, FToB, EToDomain) = read_inp_2d("meshes/square_circle.inp";
                                                      bc_map = bc_map)
+  # EToV defines the element by its vertices
+  # EToF defines element by its four faces, in global face number
+  # FToB defines whether face is Dirichlet (1), Neumann (2), interior jump (7) or just an interior interface (0)
+  # EToDomain is 1 if element is inside circle; 2 otherwise
 
   # number of elements and faces
   (nelems, nfaces) = (size(EToV, 2), size(FToB, 1))
@@ -41,16 +45,16 @@ let
   @assert maximum(maximum(EToF)) == nfaces
 
   # Determine secondary arrays
-  # FToE : Unique Global Face to Element Number
-  # FToLF: Unique Global Face to Element local face number
-  # EToO : Element to Unique Global Faces Orientation
-  # EToS : Element to Unique Global Face Side
+  # FToE : Unique Global Face to Element Number            (the i'th column of this stores the element numbers that share the global face number i)
+  # FToLF: Unique Global Face to Element local face number (the i'th column of this stores the element local face numbers that shares the global face number i)
+  # EToO : Element to Unique Global Faces Orientation      (not sure)
+  # EToS : Element to Unique Global Face Side	           (not sure)
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
 
   # Exact solution
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
-  (kx, ky) = (4*π / Lx, 4*π / Ly)
+  (kx, ky) = (2*π / Lx, 4*π / Ly)
   vex(x,y,e) = begin
     if EToDomain[e] == 1
       return cos.(kx * x) .* cosh.(ky * y)
@@ -78,6 +82,38 @@ let
       error("invalid block")
     end
   end
+  vex_xx(x,y,e) = begin
+    if EToDomain[e] == 1
+      return -kx^2 * cos.(kx * x) .* cosh.(ky * y)
+    elseif EToDomain[e] == 2
+      return -kx^2 * cos.(kx * x) .* cosh.(ky * y)
+    else
+      error("invalid block")
+    end
+  end
+  vex_xy(x,y,e) = begin
+    if EToDomain[e] == 1
+      return -kx * ky * sin.(kx * x) .* sinh.(ky * y)
+    elseif EToDomain[e] == 2
+      return -kx * ky * sin.(kx * x) .* sinh.(ky * y)
+    else
+      error("invalid block")
+    end
+  end
+
+    vex_yy(x,y,e) = begin
+    if EToDomain[e] == 1
+      return ky^2 * cos.(kx * x) .* cosh.(ky * y)
+    elseif EToDomain[e] == 2
+      return ky^2 * cos.(kx * x) .* cosh.(ky * y)
+    else
+      error("invalid block")
+    end
+  end
+
+
+
+
 
   ϵ = zeros(4)
   for lvl = 1:length(ϵ)
@@ -154,9 +190,11 @@ let
     #
     # Do some assemble of the global volume operators
     #
+    
     (M, FbarT, D, vstarts, FToλstarts) =
       LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
                            (x) -> cholesky(Symmetric(x)))
+    @show lvl
     locfactors = M.F
 
     # Get a unique array indexes for the face to jumps map
@@ -216,7 +254,13 @@ let
       end
       locbcarray!((@view g[vstarts[e]:vstarts[e+1]-1]), gδe, lop[e],
                   FToB[EToF[:,e]], bc_Dirichlet, bc_Neumann, in_jump, (e, δ))
+
+      source = (x, y, e) -> (-vex_xx(x, y, e)  - vex_yy(x, y, e))
+      locsourcearray!((@view g[vstarts[e]:vstarts[e+1]-1]), source, lop[e], e)
     end
+
+
+									
 
     lockedblock = Array{Bool, 1}(undef, nelems)
     for e = 1:nelems
@@ -233,7 +277,7 @@ let
     u[:] = -FbarT' * λ
     u[:] .= g .+ u
 
-    for e = 1:nelems
+  for e = 1:nelems
       F = locfactors[e]
       (x, y) = lop[e].coord
       JH = lop[e].JH
