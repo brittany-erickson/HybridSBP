@@ -14,7 +14,7 @@ ${h=3}
 ${Wf=40}
 
 ${h1=3}
-${h2=50}
+${h2=75}
 
 create surface rectangle width {2*Lx} height {Ly} zplane 
 move Surface 1  location 0 {-Ly/2} 0 include_merged
@@ -33,8 +33,8 @@ delete curve 5 6
 
 Sideset 1 add curve 2 4         # Displacement (half V_p)
 Sideset 2 add curve 9 10 11 12  # Free
-Sideset 8 add curve 8           # steady sliding
-Sideset 7 add curve 7           # Frictional fault
+Sideset 7 add curve 8           # Frictional fault
+Sideset 8 add curve 7           # steady sliding
 
 curve 8  size {h1}
 curve 8  scheme equal
