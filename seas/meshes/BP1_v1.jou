@@ -1,0 +1,57 @@
+# RUN WITH CUBIT 15.2
+
+# Set units to SI.
+${Units('si')}
+
+#---------------
+reset
+
+${Lx=400}
+${Ly=400}
+
+${H=15}
+${h=3}
+${Wf=40}
+
+${h1=3}
+${h2=50}
+
+create surface rectangle width {2*Lx} height {Ly} zplane 
+move Surface 1  location 0 {-Ly/2} 0 include_merged
+
+create vertex  0     0    0
+# create vertex  0   {-H}   0
+# create vertex  0 {-H-h}   0
+create vertex  0  {-Wf}   0
+create vertex  0  {-Ly}   0
+
+create curve vertex 5 6 delete
+create curve vertex 6 7 delete
+
+imprint tolerant surface 1 with curve 5 6 merge
+delete curve 5 6
+
+Sideset 1 add curve 2 4         # Displacement (half V_p)
+Sideset 2 add curve 9 10 11 12  # Free
+Sideset 8 add curve 8           # steady sliding
+Sideset 7 add curve 7           # Frictional fault
+
+curve 8  size {h1}
+curve 8  scheme equal
+mesh curve 8
+
+curve 9 12  scheme stretch first_size {h1} last_size {h2} start vertex 11
+mesh curve 9 12
+
+curve 7 scheme stretch first_size {h1} last_size {h2} start vertex 9
+mesh curve 7
+
+curve 2 4 10 11  size {h2}
+curve 2 4 10 11 scheme equal
+mesh curve 2 4 10 11
+
+mesh surface 3
+surface 2  scheme mirror source surface 3
+mesh surface 2
+
+export Abaqus "/Users/jekozdon/codes/D2_sbp/seas/meshes/BP1_v1.inp"  overwrite
