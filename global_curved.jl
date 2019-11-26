@@ -104,8 +104,11 @@ function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
   Np = Nrp * Nsp
 
   # Derivative operators for the metric terms
-  (DrM, _, _, r) = diagonal_sbp_D1(pm, Nr; xc = (-1,1))
-  (DsM, _, _, s) = diagonal_sbp_D1(pm, Ns; xc = (-1,1))
+  @assert pm <= 8
+  pp = pm == 6 ? 8 : pm
+
+  (DrM, _, _, r) = diagonal_sbp_D1(pp, Nr; xc = (-1,1))
+  (DsM, _, _, s) = diagonal_sbp_D1(pp, Ns; xc = (-1,1))
 
   # Identity matrices for the comuptation
   Ir = sparse(I, Nrp, Nrp)
