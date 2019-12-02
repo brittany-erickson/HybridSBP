@@ -64,96 +64,96 @@ let
   # Exact solution
   Lx = maximum(verts[1,:])
   Ly = maximum(abs.(verts[2,:]))
-  
+
 
   vinside(x,y,e) = begin
-	  r = sqrt.(x .^ 2 + y .^ 2)
-	  theta = atan.(y,x)
-	  return r .* 0 
-    end
-
-   voutside(x,y,e) = begin
-	   r = sqrt.(x .^ 2 + y .^ 2)
-	   theta = atan.(y,x)
-	   return sin.(theta)   
-    end
-
-   vinside_x(x,y,e) = begin
-	  r = sqrt.(x .^ 2 + y .^ 2)
-	  theta = atan.(y,x)
-	  dtheta_dx = -sin.(theta) ./ r
-	  dr_dx = cos.(theta)
-	  dv_dr =  0 .* r 
-	  dv_dtheta = r .*  0 
-	  return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx  
-    end 
-
-
-   vinside_y(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dy = cos.(theta) ./ r
-          dr_dy = 0 .* sin.(theta)
-	  dv_dr =  0 .* cos.(theta)
-	  dv_dtheta = r .* 0
-          return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
-    end
-
-   voutside_x(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dx = -1 .* sin.(theta) ./ r
-          dr_dx = cos.(theta)
-	  dv_dr =  0 .* r
-	  dv_dtheta =  cos.(theta)
-          return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
-    end 
-
-
-    voutside_y(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dy = cos.(theta) ./ r
-          dr_dy = sin.(theta)
-	  dv_dr = 0 .* r
-	  dv_dtheta = cos.(theta)
-  	  return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy  
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    return r .* 0
   end
 
-   
-    polar_laplace(x,y,e) = begin #u_rr + (1/r)*u_r + (1/r^2)*u_theta,theta
-	  r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-	  if EToDomain[e] == 1
-		  return 0 .* r
-	  elseif EToDomain[e] == 2
-		  return (-1 ./ r .^ 2) .* sin.(theta)
-	  else
-      		error("invalid block")
-    	  end
+  voutside(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    return sin.(theta)
+  end
+
+  vinside_x(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dx = -sin.(theta) ./ r
+    dr_dx = cos.(theta)
+    dv_dr =  0 .* r
+    dv_dtheta = r .*  0
+    return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
+  end
+
+
+  vinside_y(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dy = cos.(theta) ./ r
+    dr_dy = 0 .* sin.(theta)
+    dv_dr =  0 .* cos.(theta)
+    dv_dtheta = r .* 0
+    return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
+  end
+
+  voutside_x(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dx = -1 .* sin.(theta) ./ r
+    dr_dx = cos.(theta)
+    dv_dr =  0 .* r
+    dv_dtheta =  cos.(theta)
+    return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
+  end
+
+
+  voutside_y(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dy = cos.(theta) ./ r
+    dr_dy = sin.(theta)
+    dv_dr = 0 .* r
+    dv_dtheta = cos.(theta)
+    return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
+  end
+
+
+  polar_laplace(x,y,e) = begin #u_rr + (1/r)*u_r + (1/r^2)*u_theta,theta
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    if EToDomain[e] == 1
+      return 0 .* r
+    elseif EToDomain[e] == 2
+      return (-1 ./ r .^ 2) .* sin.(theta)
+    else
+      error("invalid block")
     end
+  end
 
 
   vex(x,y,e) = begin
     if EToDomain[e] == 1
-	    return vinside(x,y,e)
+      return vinside(x,y,e)
     elseif EToDomain[e] == 2
-	    return voutside(x,y,e)
+      return voutside(x,y,e)
     else
       error("invalid block")
     end
   end
 
   vex_x(x,y,e) = begin
-    if EToDomain[e] == 1	    
-	    return vinside_x(x,y,e) 
+    if EToDomain[e] == 1
+      return vinside_x(x,y,e)
     elseif EToDomain[e] == 2
       return voutside_x(x,y,e)
     else
       error("invalid block")
     end
   end
-  
+
   vex_y(x,y,e) = begin
     if EToDomain[e] == 1
       return vinside_y(x,y,e)
@@ -166,7 +166,7 @@ let
 
 
   ϵ = zeros(4)
-  
+
   for lvl = 1:length(ϵ)
     # Set up the local grid dimensions
     Nr = EToN0[1, :] * (2^(lvl-1))
@@ -177,7 +177,7 @@ let
     #
 
     # Dictionary to store the operators
-    OPTYPE = typeof(locoperator(2, 8, 8))
+    OPTYPE = typeof(locoperator(2, 16, 16))
     lop = Dict{Int64, OPTYPE}()
 
     # Loop over blocks and create local operators
@@ -258,8 +258,8 @@ let
     # Do some assemble of the global volume operators
     #
     (M, FbarT, D, vstarts, FToλstarts) =
-      LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
-                           (x) -> cholesky(Symmetric(x)))
+    LocalGlobalOperators(lop, Nr, Ns, FToB, FToE, FToLF, EToO, EToS,
+                         (x) -> cholesky(Symmetric(x)))
     @show lvl
     locfactors = M.F
 
@@ -285,8 +285,8 @@ let
         (lf1, lf2) = FToLF[:, f]
         (xf, yf) = lop[e1].facecoord
         @views δ[FToδstarts[f]:(FToδstarts[f+1]-1)] =
-          vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
-	   #@show δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
+        vex(xf[lf1], yf[lf1], e2) - vex(xf[lf1], yf[lf1], e1)
+        #@show δ[FToδstarts[f]:(FToδstarts[f+1]-1)]
       end
     end
 
@@ -340,13 +340,13 @@ let
       @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
       #=
       ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-            (@view u[vstarts[e]:(vstarts[e+1]-1)]))
+      (@view u[vstarts[e]:(vstarts[e+1]-1)]))
       =#
       #@show vex(x[:],y[:],e)' * JH * vex(x[:],y[:],e)
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
                                                vex(x[:], y[:], e))
       ϵ[lvl] += (Δ[vstarts[e]:(vstarts[e+1]-1)]' * JH * Δ[vstarts[e]:(vstarts[e+1]-1)])
-      
+
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
     @show (lvl, ϵ[lvl])
