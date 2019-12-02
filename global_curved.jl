@@ -16,7 +16,7 @@ const BC_LOCKED_INTERFACE = 0
 const BC_JUMP_INTERFACE   = 7
 
 #{{{ Transfinite Blend
-function transfinite_blend(α1, α2, α3, α4, r, s)
+function transfinite_blend(α1, α2, α3, α4, r, s, p)
   # +---4---+
   # |       |
   # 1       2
@@ -30,16 +30,25 @@ function transfinite_blend(α1, α2, α3, α4, r, s)
       (1 .- r) .* (1 .+ s) .* α1( 1) +
       (1 .+ r) .* (1 .- s) .* α2(-1) +
       (1 .- r) .* (1 .- s) .* α1(-1)) / 4
+
+  (Nrp, Nsp) = size(r)
+  (Dr, _, _, _) = diagonal_sbp_D1(p, Nrp-1; xc = (-1,1))
+  (Ds, _, _, _) = diagonal_sbp_D1(p, Nsp-1; xc = (-1,1))
+
+  xr = Dr * x
+  xs = x * Ds'
+
+  return (x, xr, xs)
 end
 
-function transfinite_blend(v1::T1, v2::T2, v3::T3, v4::T4, r, s;
+function transfinite_blend(v1::T1, v2::T2, v3::T3, v4::T4, r, s, p;
                            e1 = (α) -> v1 * (1 .- α) / 2 + v3 * (1 .+ α) / 2,
                            e2 = (α) -> v2 * (1 .- α) / 2 + v4 * (1 .+ α) / 2,
                            e3 = (α) -> v1 * (1 .- α) / 2 + v2 * (1 .+ α) / 2,
                            e4 = (α) -> v3 * (1 .- α) / 2 + v4 * (1 .+ α) / 2
                           ) where {T1 <: Number, T2 <: Number,
                                    T3 <: Number, T4 <: Number}
-  transfinite_blend(e1, e2, e3, e4, r, s)
+  transfinite_blend(e1, e2, e3, e4, r, s, p)
 end
 #}}}
 
@@ -98,7 +107,9 @@ end
 #}}}
 
 #{{{ locoperator
-function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
+function create_metrics(pm, Nr, Ns,
+                        xf=(r,s)->(r, ones(size(r)), zeros(size(r))),
+                        yf=(r,s)->(s, zeros(size(s)), ones(size(s))))
   Nrp = Nr + 1
   Nsp = Ns + 1
   Np = Nrp * Nsp
@@ -107,30 +118,14 @@ function create_metrics(pm, Nr, Ns, xf=(r,s)->r, yf=(r,s)->s)
   @assert pm <= 8
   pp = pm == 6 ? 8 : pm
 
-  (DrM, _, _, r) = diagonal_sbp_D1(pp, Nr; xc = (-1,1))
-  (DsM, _, _, s) = diagonal_sbp_D1(pp, Ns; xc = (-1,1))
-
-  # Identity matrices for the comuptation
-  Ir = sparse(I, Nrp, Nrp)
-  Is = sparse(I, Nsp, Nsp)
+  r = range(-1, stop=1, length=Nrp)
+  s = range(-1, stop=1, length=Nsp)
 
   # Create the mesh
-  (r, s) = (ones(Nsp) ⊗ r, s ⊗ ones(Nrp))
-  (x, y) = (xf(r, s), yf(r, s))
-
-  # Compute the metric terms
-  xr = (Is ⊗ DrM) * x
-  xs = (DsM ⊗ Ir) * x
-  yr = (Is ⊗ DrM) * y
-  ys = (DsM ⊗ Ir) * y
-
-  x = reshape(x, Nrp, Nsp)
-  y = reshape(y, Nrp, Nsp)
-
-  xr = reshape(xr, Nrp, Nsp)
-  yr = reshape(yr, Nrp, Nsp)
-  xs = reshape(xs, Nrp, Nsp)
-  ys = reshape(ys, Nrp, Nsp)
+  r = ones(1, Nsp) ⊗ r
+  s = s' ⊗ ones(Nrp)
+  (x, xr, xs) = xf(r, s)
+  (y, yr, ys) = yf(r, s)
 
   J = xr .* ys - xs .* yr
   @assert minimum(J) > 0

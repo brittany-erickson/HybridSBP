@@ -78,8 +78,8 @@ let
       (x1, x2, x3, x4) = verts[1, EToV[:, e]]
       (y1, y2, y3, y4) = verts[2, EToV[:, e]]
 
-      xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s)
-      yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s)
+      xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s, SBPp)
+      yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s, SBPp)
 
       # Build local operators
       lop[e] = locoperator(SBPp, Nr[e], Ns[e], xt, yt, LFToB = FToB[EToF[:, e]])

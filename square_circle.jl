@@ -178,9 +178,9 @@ let
 
       # Create the volume transform as the transfinite blending of the edge
       # transformations
-      xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s;
+      xt = (r,s)->transfinite_blend(x1, x2, x3, x4, r, s, SBPp;
                                     e1=ex[1], e2=ex[2], e3=ex[3], e4=ex[4])
-      yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s;
+      yt = (r,s)->transfinite_blend(y1, y2, y3, y4, r, s, SBPp;
                                     e1=ey[1], e2=ey[2], e3=ey[3], e4=ey[4])
 
       metrics = create_metrics(SBPp, Nr[e], Ns[e], xt, yt)
