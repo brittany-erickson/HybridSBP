@@ -903,7 +903,7 @@ function plot_connectivity(verts, EToV)
   Ly = extrema(verts[2,:])
   Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
   plt = Plot(BrailleCanvas(80, 40,
-                           origin_x = Lx[1], origin_y = Ly[1], 
+                           origin_x = Lx[1], origin_y = Ly[1],
                            width = Lx[2] - Lx[1], height = Ly[2] - Ly[1]))
 
 
@@ -936,7 +936,7 @@ function plot_blocks(lop)
   Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
 
   plt = Plot(BrailleCanvas(80, 40,
-                           origin_x = Lx[1], origin_y = Ly[1], 
+                           origin_x = Lx[1], origin_y = Ly[1],
                            width = Lx[2] - Lx[1], height = Lx[2] - Lx[1]))
 
 
