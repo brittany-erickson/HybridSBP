@@ -690,9 +690,12 @@ function bcstarts(FToB, FToE, FToLF, bctype, Nr, Ns)
 end
 
 function LocalToGLobalRHS!(b, g, gδ, u, M, FbarT, vstarts)
-  for e = 1:length(M)
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
-                                             g[vstarts[e]:(vstarts[e+1]-1)])
+  u .= 0
+  @inbounds for e = 1:length(M)
+    if maximum(abs.(g[vstarts[e]:(vstarts[e+1]-1)])) > 0
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
+                                               g[vstarts[e]:(vstarts[e+1]-1)])
+    end
   end
   mul!(b, FbarT, u)
   @. b = gδ - b
