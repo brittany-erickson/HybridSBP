@@ -73,72 +73,72 @@ let
     r = sqrt.(x .^ 2 + y .^ 2)
     theta = atan.(y,x)
     return c .* (1 .- exp.(-1 .* r .^ 2)) .* r .* sin.(theta)
-   end
+  end
 
-   voutside(x,y,e) = begin
-     r = sqrt.(x .^ 2 + y .^ 2)
-     theta = atan.(y,x)
-     return (r .- 1) .^ 2 .* cos.(theta) .+ (r .- 1) .* sin.(theta)
-   end
+  voutside(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    return (r .- 1) .^ 2 .* cos.(theta) .+ (r .- 1) .* sin.(theta)
+  end
 
 
-    vinside_x(x,y,e) = begin
-       r = sqrt.(x .^ 2 + y .^ 2)
-       theta = atan.(y,x)
-       dtheta_dx = -1 .* sin.(theta) ./ r
-       dr_dx = cos.(theta)
-       dv_dr = c * (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
-       dv_dtheta = c .* (1 .- exp.(-1 .* r .^ 2)) .* r .* cos.(theta)
-       return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
+  vinside_x(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dx = -1 .* sin.(theta) ./ r
+    dr_dx = cos.(theta)
+    dv_dr = c * (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
+    dv_dtheta = c .* (1 .- exp.(-1 .* r .^ 2)) .* r .* cos.(theta)
+    return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
+  end
+
+
+  vinside_y(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dy = cos.(theta) ./ r
+    dr_dy = sin.(theta)
+    dv_dr = c * (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
+    dv_dtheta = c .* (1 .- exp.(-1 .* r .^ 2)) .* r .* cos.(theta)
+    return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
+  end
+
+  voutside_x(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dx = -1 .* sin.(theta) ./ r
+    dr_dx = cos.(theta)
+    dv_dr =  2 .* (r .- 1) .* cos.(theta) .+ sin.(theta)
+    dv_dtheta = -1 .* (r .- 1) .^ 2 .* sin.(theta) .+ (r .- 1) .* cos.(theta)
+    return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
+  end
+
+
+  voutside_y(x,y,e) = begin
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    dtheta_dy = cos.(theta) ./ r
+    dr_dy = sin.(theta)
+    dv_dr = 2 .* (r .- 1) .* cos.(theta) .+ sin.(theta)
+    dv_dtheta = -1 .*  (r .- 1) .^ 2 .* sin.(theta) .+ (r .- 1) .* cos.(theta)
+    return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
+  end
+
+
+  polar_laplace(x,y,e) = begin #u_rr + (1/r)*u_r + (1/r^2)*u_theta,theta
+    r = sqrt.(x .^ 2 + y .^ 2)
+    theta = atan.(y,x)
+    if EToDomain[e] == 1
+      u_r = c .* (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
+      u_rr = c .* exp.(-1 .* r .^ 2) .* (6 .* r .- 4 .* r .^ 3) .* sin.(theta)
+      return u_rr .+ (1 ./ r) .* u_r .- (c ./ r .^ 2) .* (1 .- exp.(-1 .* r .^ 2)) .* r .* sin.(theta)
+      return dv_dr .* dr_dy .+ (cos.(r .- 1) .* cos.(theta)) .* (cos.(theta))
+    elseif EToDomain[e] == 2
+      return 2 * cos.(theta) .+ (1 ./ r) .* (2 .* (r .- 1) .* cos.(theta) .+ sin.(theta)) .+ (1 ./ r .^ 2) .* (-1 .* (r .- 1) .^ 2 .* cos.(theta) .- (r .- 1) .* sin.(theta))
+    else
+      error("invalid block")
     end
-
-
-   vinside_y(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dy = cos.(theta) ./ r
-          dr_dy = sin.(theta)
-          dv_dr = c * (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
-          dv_dtheta = c .* (1 .- exp.(-1 .* r .^ 2)) .* r .* cos.(theta)
-          return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
-    end
-
-   voutside_x(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dx = -1 .* sin.(theta) ./ r
-          dr_dx = cos.(theta)
-	  dv_dr =  2 .* (r .- 1) .* cos.(theta) .+ sin.(theta) 
-          dv_dtheta = -1 .* (r .- 1) .^ 2 .* sin.(theta) .+ (r .- 1) .* cos.(theta)
-          return dv_dr .* dr_dx + dv_dtheta .* dtheta_dx
-    end
-
-
-    voutside_y(x,y,e) = begin
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          dtheta_dy = cos.(theta) ./ r
-          dr_dy = sin.(theta)
-	  dv_dr = 2 .* (r .- 1) .* cos.(theta) .+ sin.(theta)
-          dv_dtheta = -1 .*  (r .- 1) .^ 2 .* sin.(theta) .+ (r .- 1) .* cos.(theta)
-          return dv_dr .* dr_dy + dv_dtheta .* dtheta_dy
-    end
-
-
-     polar_laplace(x,y,e) = begin #u_rr + (1/r)*u_r + (1/r^2)*u_theta,theta
-          r = sqrt.(x .^ 2 + y .^ 2)
-          theta = atan.(y,x)
-          if EToDomain[e] == 1
-		  u_r = c .* (2 .* r .^ 2 .* exp.(-1 .* r .^ 2) .+ 1 .- exp.(-1 .* r .^ 2)) .* sin.(theta)
-		  u_rr = c .* exp.(-1 .* r .^ 2) .* (6 .* r .- 4 .* r .^ 3) .* sin.(theta)
-		  return u_rr .+ (1 ./ r) .* u_r .- (c ./ r .^ 2) .* (1 .- exp.(-1 .* r .^ 2)) .* r .* sin.(theta)
-	  return dv_dr .* dr_dy .+ (cos.(r .- 1) .* cos.(theta)) .* (cos.(theta))
-          elseif EToDomain[e] == 2
-		  return 2 * cos.(theta) .+ (1 ./ r) .* (2 .* (r .- 1) .* cos.(theta) .+ sin.(theta)) .+ (1 ./ r .^ 2) .* (-1 .* (r .- 1) .^ 2 .* cos.(theta) .- (r .- 1) .* sin.(theta))
-          else
-                error("invalid block")
-          end
-    end
+  end
 
 
 
@@ -288,7 +288,7 @@ let
     (Δ, u, g) = (zeros(VNp), zeros(VNp), zeros(VNp))
     δ = zeros(δNp)
 
-    
+
     for f = 1:nfaces
       if FToB[f] == BC_JUMP_INTERFACE
         (e1, e2) = FToE[:, f]
