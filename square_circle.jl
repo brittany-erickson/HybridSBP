@@ -1,4 +1,5 @@
 include("global_curved.jl")
+import PGFPlots
 
 let
   # SBP interior order
@@ -60,6 +61,31 @@ let
   #        (the i'th column of this stores whether an element face is on the
   #        plus side or minus side of the global face)
   (FToE, FToLF, EToO, EToS) = connectivityarrays(EToV, EToF)
+
+  pgf_axis = PGFPlots.Axis(style="width=5cm, height=5cm, ticks=none",
+                           xlabel=PGFPlots.L"$x$",
+                           ylabel=PGFPlots.L"$y$",
+                           xmin = -2, xmax = 2,
+                           ymin = -2, ymax = 2)
+  for f in 1:nfaces
+    if FToB[f] != BC_JUMP_INTERFACE
+      (e, lf) = FToE[1,f], FToLF[1,f]
+      if lf == 1
+        v1, v2 = EToV[1, e], EToV[3, e]
+      elseif lf == 2
+        v1, v2 = EToV[2, e], EToV[4, e]
+      elseif lf == 3
+        v1, v2 = EToV[1, e], EToV[2, e]
+      else
+        v1, v2 = EToV[3, e], EToV[4, e]
+      end
+      x = verts[1, [v1 v2]][:]
+      y = verts[2, [v1 v2]][:]
+      push!(pgf_axis, PGFPlots.Linear(x, y, style="no marks, solid, black"))
+    end
+  end
+  push!(pgf_axis, PGFPlots.Circle(0,0,1, style = "very thick, red"))
+  PGFPlots.save("square_circle.tikz", pgf_axis)
 
   # Exact solution
   Lx = maximum(verts[1,:])
