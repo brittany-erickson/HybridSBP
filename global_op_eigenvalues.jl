@@ -2,7 +2,7 @@
 using Random
 Random.seed!(777)
 
-# include("global_curved.jl")
+include("global_curved.jl")
 
 import PGFPlots
 
