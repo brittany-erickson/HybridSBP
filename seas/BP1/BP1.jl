@@ -1,4 +1,4 @@
-include("../global_curved.jl")
+include("../../global_curved.jl")
 include("odefun.jl")
 
 let
