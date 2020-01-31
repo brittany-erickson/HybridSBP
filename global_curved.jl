@@ -446,7 +446,6 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   C̃3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3))
   C̃4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4))
 
-  # TODO: Fix minus sign (reverse of the paper)
   G1 = -(Is ⊗ er0T) * Sr0 - ((csr0 * Qs) ⊗ er0T)
   G2 = +(Is ⊗ erNT) * SrN + ((csrN * Qs) ⊗ erNT)
   G3 = -(es0T ⊗ Ir) * Ss0 - (es0T ⊗ (crs0 * Qr))
