@@ -2,6 +2,8 @@ include("global_curved.jl")
 import PGFPlots
 
 let
+  method = :displacements
+
   # SBP interior order
   SBPp   = 6
 
@@ -35,7 +37,7 @@ let
   # plot_connectivity(verts, EToV)
 
   # This is the base mesh size in each dimension
-  N1 = N0 = 16
+  N1 = N0 = 17
 
   # EToN0 is the base mesh size (e.g., before refinement)
   EToN0 = zeros(Int64, 2, nelems)
@@ -362,22 +364,37 @@ let
       locsourcearray!((@view g[vstarts[e]:vstarts[e+1]-1]), source, lop[e], e)
     end
 
-    LocalToGLobalRHS!(bλ, g, gδ,  u, locfactors, FbarT, vstarts)
-    λ[:] = BF \ bλ
+    if method == :monolithic
+      # Solve the monolithic sytem
+      M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
+      A = [M FbarT'; FbarT Diagonal(D)]
+      uλ = A \ [g;gδ]
+      u[:] .= uλ[1:length(u)]
+    elseif method == :trace
+      # Solve for the trace variables then compute displacements
+      LocalToGLobalRHS!(bλ, g, gδ, u, locfactors, FbarT, vstarts)
+      λ[:] = BF \ bλ
 
-    u[:] = -FbarT' * λ
-    u[:] .= g .+ u
+      u[:] = -FbarT' * λ
+      u[:] .= g .+ u
+      for e = 1:nelems
+        F = locfactors[e]
+        @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
+        #=
+        ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
+              (@view u[vstarts[e]:(vstarts[e+1]-1)]))
+        =#
+      end
+    elseif method == :displacements
+      # Solve for the discplacement directly
+      M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
+      C = M - FbarT' * Diagonal(1 ./ D) * FbarT
+      u[:] = C \ (g - FbarT' * (gδ ./ D))
+    end
 
     for e = 1:nelems
-      F = locfactors[e]
       (x, y) = lop[e].coord
       JH = lop[e].JH
-
-      @views u[vstarts[e]:(vstarts[e+1]-1)] = F \ u[vstarts[e]:(vstarts[e+1]-1)]
-      #=
-      ldiv!((@view u[vstarts[e]:(vstarts[e+1]-1)]), F,
-      (@view u[vstarts[e]:(vstarts[e+1]-1)]))
-      =#
       #@show vex(x[:],y[:],e)' * JH * vex(x[:],y[:],e)
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
                                                vex(x[:], y[:], e))
