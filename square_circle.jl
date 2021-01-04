@@ -2,7 +2,7 @@ include("global_curved.jl")
 import PGFPlots
 
 let
-  method = :displacements
+  method = :trace
 
   # SBP interior order
   SBPp   = 6
