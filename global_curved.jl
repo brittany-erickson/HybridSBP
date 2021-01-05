@@ -456,6 +456,14 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   F3 = G3' - (es0 ⊗ (τ3 * H3))
   F4 = G4' - (esN ⊗ (τ4 * H4))
 
+  HfI_F1T = H1I * G1 - (τ1 ⊗ er0')
+  HfI_F2T = H2I * G2 - (τ2 ⊗ erN')
+  HfI_F3T = H3I * G3 - (es0' ⊗ τ3)
+  HfI_F4T = H4I * G4 - (esN' ⊗ τ4)
+  HfI_G1T = H1I * G1
+  HfI_G2T = H2I * G2
+  HfI_G3T = H3I * G3
+  HfI_G4T = H4I * G4
   M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
   # Modify the operator to handle the boundary conditions
@@ -480,6 +488,8 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   JH = sparse(1:Np, 1:Np, view(J, :)) * (Hs ⊗ Hr)
   (M̃ = M̃,
    F = (F1, F2, F3, F4),
+   HfI_FT = (HfI_F1T, HfI_F2T, HfI_F3T, HfI_F4T),
+   HfI_GT = (HfI_G1T, HfI_G2T, HfI_G3T, HfI_G4T),
    coord = metrics.coord,
    facecoord = metrics.facecoord,
    JH = JH,
@@ -580,6 +590,16 @@ function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
     end
     ge[:] -= F[lf] * vf
   end
+end
+#}}}
+
+#{{{ computetraction
+function computetraction(lop, lf, u, λ, δ)
+  HfI_FT = lop.HfI_FT[lf]
+  τf = lop.τ[lf]
+  sJ = lop.sJ[lf]
+
+  return (HfI_FT * u + τf * (λ .- δ / 2)) ./ sJ
 end
 #}}}
 

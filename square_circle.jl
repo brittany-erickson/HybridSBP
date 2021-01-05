@@ -202,6 +202,7 @@ let
 
 
   ϵ = zeros(4)
+  τϵ = copy(ϵ)
 
   for lvl = 1:length(ϵ)
     # Set up the local grid dimensions
@@ -399,12 +400,32 @@ let
       @views Δ[vstarts[e]:(vstarts[e+1]-1)] = (u[vstarts[e]:(vstarts[e+1]-1)] -
                                                vex(x[:], y[:], e))
       ϵ[lvl] += (Δ[vstarts[e]:(vstarts[e+1]-1)]' * JH * Δ[vstarts[e]:(vstarts[e+1]-1)])
+    end
 
+    for f = 1:nfaces
+      e1 = FToE[1, f]
+      lf1 = FToLF[1, f]
+      if FToB[f] == BC_JUMP_INTERFACE
+        (xf, yf) = (lop[e1].facecoord[1][lf1], lop[e1].facecoord[2][lf1])
+        (nx, ny) = (lop[e1].nx[lf1], lop[e1].ny[lf1])
+        τex = nx .* vex_x(xf, yf, e1) + ny .* vex_y(xf, yf, e1)
+        HsJ = lop[e1].Hf[lf1] * Diagonal(lop[e1].sJ[lf1])
+
+        # Compute the shear-traction
+        λrng = FToλstarts[f]:(FToλstarts[f+1]-1)
+        δrng = FToδstarts[f]:(FToδstarts[f+1]-1)
+        urng = vstarts[e1]:(vstarts[e1+1]-1)
+        τ = computetraction(lop[e1], lf1, u[urng], λ[λrng], δ[δrng])
+        Δτ = τ - τex
+        τϵ[lvl] += Δτ' * HsJ * Δτ
+      end
     end
     ϵ[lvl] = sqrt(ϵ[lvl])
-    @show (lvl, ϵ[lvl])
+    τϵ[lvl] = sqrt(τϵ[lvl])
+    @show (lvl, ϵ[lvl], τϵ[lvl])
   end
   println((log.(ϵ[1:end-1]) - log.(ϵ[2:end])) / log(2))
+  println((log.(τϵ[1:end-1]) - log.(τϵ[2:end])) / log(2))
 
   nothing
 end
