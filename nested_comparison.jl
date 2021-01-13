@@ -2,6 +2,7 @@ include("global_curved.jl")
 import PGFPlots
 import Metis
 
+Metis.options[Metis.METIS_OPTION_DBGLVL] = Metis.METIS_DBG_SEPINFO
 
 function bin_matrix(B, M = 100)
   N = size(B, 1)
@@ -49,7 +50,7 @@ function bin_matrix_plot(fname, B, M = 300)
   PGFPlots.save(fname, pgf_axis)
 end
 
-let
+begin
   method = :trace
 
   # SBP interior order
@@ -84,7 +85,7 @@ let
   # plot_connectivity(verts, EToV)
 
   # This is the base mesh size in each dimension
-  N1 = N0 = 17
+  N1 = N0 = 17*4
 
   # EToN0 is the base mesh size (e.g., before refinement)
   EToN0 = zeros(Int64, 2, nelems)
@@ -224,21 +225,26 @@ let
   B2 = (B + B')/2
   @assert B2 ≈ B
   perm, _ = Metis.permutation(B2)
+  B2_p = B2[perm, perm]
 
+  #=
   # display(spy(B))
   # display(spy(B[perm, perm]))
   display(spy(bin_matrix(B)))
   display(spy(bin_matrix(B[perm, perm])))
   bin_matrix_plot("trace.tikz", B)
   bin_matrix_plot("trace_perm.tikz", B[perm, perm])
+  =#
 
   # Monolithic system
   M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   A = [M FbarT'; FbarT Diagonal(D)]
 
+  #=
   A2 = (A + A')/2
   @assert A2 ≈ A
   perm, _ = Metis.permutation(A2)
+  A2_p = A2[perm, perm]
 
   # display(spy(A))
   # display(spy(A[perm, perm]))
@@ -246,20 +252,59 @@ let
   display(spy(bin_matrix(A[perm, perm])))
   bin_matrix_plot("monolithic.tikz", A)
   bin_matrix_plot("monolithic_perm.tikz", A[perm, perm])
+  =#
 
   # Displacement system
+  M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   C = M - FbarT' * Diagonal(1 ./ D) * FbarT
 
   C2 = (C + C')/2
   @assert C2 ≈ C
+  Libc.flush_cstdio()
+  OLD_STDOUT = stdout
+  rdo, wro = redirect_stdout()
+  # perm, iperm = Metis.permutation(A)
   perm, _ = Metis.permutation(C2)
+  Libc.flush_cstdio()
+  close(wro)
+  redirect_stdout(OLD_STDOUT)
+  C2_p = C2[perm, perm]
 
+  lines = readlines(rdo)
+
+
+  @show lines
+
+  s = zeros(Int64, 4, length(lines))
+  for (iter, line) in enumerate(lines)
+      matches = eachmatch(r"-?\d+\.?\d*", line)
+      gen = (parse(Int64, m.match) for m in matches)
+      s[:, iter] = collect(gen)
+  end
+  close(rdo)
+
+  @show s
+
+  #=
   # display(spy(C))
   # display(spy(C[perm, perm]))
   display(spy(bin_matrix(C)))
+
   display(spy(bin_matrix(C[perm, perm])))
+
   bin_matrix_plot("displacement.tikz", C)
   bin_matrix_plot("displacement_perm.tikz", C[perm, perm])
+  =#
+
+  Np = (N1 + 1)*(N0 + 1)
+  G = M[1:Np, 1:Np]
+  #=
+  perm, _ = Metis.permutation(G + G')
+  display(spy(bin_matrix(G)))
+  display(spy(bin_matrix(G[perm, perm])))
+  bin_matrix_plot("singleblock.tikz", G)
+  bin_matrix_plot("singleblock_perm.tikz", G[perm, perm])
+  =#
 
 end
 nothing
