@@ -4,55 +4,55 @@ import Metis
 
 Metis.options[Metis.METIS_OPTION_DBGLVL] = Metis.METIS_DBG_SEPINFO
 
-function bin_matrix(B, M = 100)
-  N = size(B, 1)
-  n = cld(N, M)
-  B_grp = fill(false, M, M)
-  for j = 1:M, i = 1:M
-    irng = (n * (i-1) + 1):min(N, (n * (i-1) + n))
-    jrng = (n * (j-1) + 1):min(N, (n * (j-1) + n))
-    B_grp[i, j] = sum(abs.(B[irng, jrng])) > 0
+# This bombs out if `N0` and `N1` are set too big
+function metis_perm(A)
+  OLD_STDOUT = stdout
+
+  Libc.flush_cstdio()
+  rdo, wro = redirect_stdout()
+  Libc.flush_cstdio()
+
+  perm, _ = Metis.permutation(A)
+
+  Libc.flush_cstdio()
+  close(wro)
+  Libc.flush_cstdio()
+  redirect_stdout(OLD_STDOUT)
+  Libc.flush_cstdio()
+
+  lines = readlines(rdo)
+
+  s = zeros(Int64, 4, length(lines))
+  for (l, line) in enumerate(lines)
+    matches = eachmatch(r"-?\d+\.?\d*", line)
+    gen = (parse(Int64, m.match) for m in matches)
+    g = collect(gen)
+    s[:, l] = g
   end
-  return B_grp
+
+  (perm, s)
 end
 
-function bin_matrix_plot(fname, B, M = 300)
-  N = size(B, 1)
-  n = cld(N, M)
-
-  pgf_axis = PGFPlots.Axis(style="""
-                           width=5cm,
-                           height=5cm,
-                           y dir=reverse,
-                           ymin = {1},
-                           x tick label style={rotate=45,
-                                               anchor=east,
-                                               /pgf/number format/.cd,
-                                               set thousands separator={}},
-                           y tick label style={/pgf/number format/.cd,
-                                               set thousands separator={}},
-                           scaled x ticks = false,
-                           scaled y ticks = false,
-                           xticklabel={\\ifdim\\tick pt=0pt \\else\\pgfmathprintnumber{\\tick}\\fi},
-                           yticklabel={\\ifdim\\tick pt=0pt \\else\\pgfmathprintnumber{\\tick}\\fi},
-                           ytick style={draw=none},
-                           xtick style={draw=none}""",
-                           xlabel=PGFPlots.L"$i$",
-                           ylabel=PGFPlots.L"$j$",
-                           xmin = 1, xmax = N,
-                           ymax = N)
-
-  I, J = findnz(sparse(bin_matrix(B, M)))
-  push!(pgf_axis, PGFPlots.Linear(n * (I .- 1) .+ 1,
-                                  n * (J .- 1) .+ 1,
-                                  style="only marks, color = black, mark size = 0.1"))
-
-  PGFPlots.save(fname, pgf_axis)
+function compute_flops(s, n = 1)
+  # Flops for the seperator
+  flops = s[4, n]^3
+  if size(s, 2) > n && s[2, n] == s[1, n + 1]
+    # @show "branch"
+    # Flops for the right branch
+    (n, flops_right) = compute_flops(s, n + 1)
+    # Flops for the left branch
+    (n, flops_left ) = compute_flops(s, n + 1)
+    flops += flops_right + flops_left
+  else
+    # @show "leaf"
+    # For the leaf case the two sides are just the flops we need
+    flops += s[2, n]^3 + s[3, n]^3
+  end
+  # @show (n, flops)
+  (n, flops)
 end
 
-begin
-  method = :trace
-
+let
   # SBP interior order
   SBPp   = 6
 
@@ -84,8 +84,8 @@ begin
   # Plot the original connectivity before mesh warping
   # plot_connectivity(verts, EToV)
 
-  # This is the base mesh size in each dimension
-  N1 = N0 = 17*4
+  # Increasing this size is how to get it to break...
+  N1 = N0 =  17
 
   # EToN0 is the base mesh size (e.g., before refinement)
   EToN0 = zeros(Int64, 2, nelems)
@@ -221,90 +221,39 @@ begin
 
   # trace system
   B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
-
   B2 = (B + B')/2
   @assert B2 ≈ B
-  perm, _ = Metis.permutation(B2)
-  B2_p = B2[perm, perm]
-
-  #=
-  # display(spy(B))
-  # display(spy(B[perm, perm]))
-  display(spy(bin_matrix(B)))
-  display(spy(bin_matrix(B[perm, perm])))
-  bin_matrix_plot("trace.tikz", B)
-  bin_matrix_plot("trace_perm.tikz", B[perm, perm])
-  =#
+  (perm_B, s_B) = metis_perm(B2)
+  B2_p = B2[perm_B, perm_B]
 
   # Monolithic system
   M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   A = [M FbarT'; FbarT Diagonal(D)]
-
-  #=
   A2 = (A + A')/2
   @assert A2 ≈ A
-  perm, _ = Metis.permutation(A2)
-  A2_p = A2[perm, perm]
-
-  # display(spy(A))
-  # display(spy(A[perm, perm]))
-  display(spy(bin_matrix(A)))
-  display(spy(bin_matrix(A[perm, perm])))
-  bin_matrix_plot("monolithic.tikz", A)
-  bin_matrix_plot("monolithic_perm.tikz", A[perm, perm])
-  =#
+  (perm_A, s_A) = metis_perm(A2)
+  A2_p = A2[perm_A, perm_A]
 
   # Displacement system
   M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   C = M - FbarT' * Diagonal(1 ./ D) * FbarT
-
   C2 = (C + C')/2
   @assert C2 ≈ C
-  Libc.flush_cstdio()
-  OLD_STDOUT = stdout
-  rdo, wro = redirect_stdout()
-  # perm, iperm = Metis.permutation(A)
-  perm, _ = Metis.permutation(C2)
-  Libc.flush_cstdio()
-  close(wro)
-  redirect_stdout(OLD_STDOUT)
-  C2_p = C2[perm, perm]
+  (perm_C, s_C) = metis_perm(C2)
+  C2_p = C2[perm_C, perm_C]
 
-  lines = readlines(rdo)
-
-
-  @show lines
-
-  s = zeros(Int64, 4, length(lines))
-  for (iter, line) in enumerate(lines)
-      matches = eachmatch(r"-?\d+\.?\d*", line)
-      gen = (parse(Int64, m.match) for m in matches)
-      s[:, iter] = collect(gen)
-  end
-  close(rdo)
-
-  @show s
-
-  #=
-  # display(spy(C))
-  # display(spy(C[perm, perm]))
-  display(spy(bin_matrix(C)))
-
-  display(spy(bin_matrix(C[perm, perm])))
-
-  bin_matrix_plot("displacement.tikz", C)
-  bin_matrix_plot("displacement_perm.tikz", C[perm, perm])
-  =#
-
+  # Single block Displacement system
   Np = (N1 + 1)*(N0 + 1)
   G = M[1:Np, 1:Np]
-  #=
-  perm, _ = Metis.permutation(G + G')
-  display(spy(bin_matrix(G)))
-  display(spy(bin_matrix(G[perm, perm])))
-  bin_matrix_plot("singleblock.tikz", G)
-  bin_matrix_plot("singleblock_perm.tikz", G[perm, perm])
-  =#
+  G2 = (G + G')/2
+  @assert G2 ≈ G
+  (perm_G, s_G) = metis_perm(G2)
+  G2_p = G2[perm_G, perm_G]
 
+  println("flops for trace system inverse:       $(compute_flops(s_B)[2])")
+  println("flops for monolithic system inverse:  $(compute_flops(s_A)[2])")
+  println("flops for displacement system inverse $(compute_flops(s_C)[2])")
+  println("flops for single block inverse:       $(compute_flops(s_G)[2])")
+  println("flops for hybridized inverse:         $(nelems * compute_flops(s_G)[2] + compute_flops(s_B)[2])")
 end
 nothing
