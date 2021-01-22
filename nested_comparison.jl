@@ -36,19 +36,26 @@ end
 function compute_flops(s, n = 1)
   # Flops for the seperator
   flops = s[4, n]^3
-  if size(s, 2) > n && s[2, n] == s[1, n + 1]
-    # @show "branch"
-    # Flops for the right branch
-    (n, flops_right) = compute_flops(s, n + 1)
-    # Flops for the left branch
-    (n, flops_left ) = compute_flops(s, n + 1)
-    flops += flops_right + flops_left
-  else
-    # @show "leaf"
-    # For the leaf case the two sides are just the flops we need
-    flops += s[2, n]^3 + s[3, n]^3
+
+  # Cache the root
+  m = n
+
+  # loop over the leaves
+  for leaf = 2:3
+
+    # Flops for the branch
+    # if next node is same as leaf value recurse
+    # otherwise add flops from the leaf directly
+    (n, flops_branch) = if size(s, 2) > n && s[leaf, m] == s[1, n + 1]
+      compute_flops(s, n + 1)
+    else
+      (n, s[leaf, m]^3)
+    end
+
+    # Add in the branches flops
+    flops += flops_branch
   end
-  # @show (n, flops)
+
   (n, flops)
 end
 
