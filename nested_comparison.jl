@@ -254,6 +254,7 @@ let
   println("flops for monolithic system inverse:  $(compute_flops(s_A)[2])")
   println("flops for displacement system inverse $(compute_flops(s_C)[2])")
   println("flops for single block inverse:       $(compute_flops(s_G)[2])")
+  println("flops for all single block inverse:   $(nelems * compute_flops(s_G)[2])")
   println("flops for hybridized inverse:         $(nelems * compute_flops(s_G)[2] + compute_flops(s_B)[2])")
 end
 nothing
