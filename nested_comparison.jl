@@ -1,5 +1,6 @@
 include("global_curved.jl")
 import PGFPlots
+
 import Metis
 
 Metis.options[Metis.METIS_OPTION_DBGLVL] = Metis.METIS_DBG_SEPINFO
@@ -24,6 +25,7 @@ function metis_perm(A)
 
   s = zeros(Int64, 4, length(lines))
   for (l, line) in enumerate(lines)
+    @show line
     matches = eachmatch(r"-?\d+\.?\d*", line)
     gen = (parse(Int64, m.match) for m in matches)
     g = collect(gen)
@@ -32,6 +34,36 @@ function metis_perm(A)
 
   (perm, s)
 end
+
+function compute_flops2(A)
+  v = Metis.separator(A)
+  lf = findall(v .== 1)
+  rt = findall(v .== 2)
+  sep = findall(v .== 3)
+  # println((length(v), length(rt), length(lf), length(sep)))
+  if length(sep) > 0
+    flops = length(sep)^3
+    flops += length(rt) >= 1 ? compute_flops2(A[rt, rt]) : length(rt)^3
+    flops += length(lf) >= 1 ? compute_flops2(A[lf, lf]) : length(lf)^3
+  else
+    flops = length(v)^3
+  end
+  return flops
+end
+
+function comp_perm(A)
+  v = Metis.separator(A)
+  lf = findall(v .== 1)
+  rt = findall(v .== 2)
+  sep = findall(v .== 3)
+  if length(lf) > 0 && length(rt) > 0
+    lf = lf[comp_perm(A[lf, lf])]
+    rt = rt[comp_perm(A[rt, rt])]
+  end
+  ind = [lf; rt; sep]
+  return ind
+end
+  
 
 function compute_flops(s, n = 1)
   # Flops for the seperator
@@ -59,7 +91,7 @@ function compute_flops(s, n = 1)
   (n, flops)
 end
 
-let
+begin
   # SBP interior order
   SBPp   = 6
 
@@ -230,38 +262,52 @@ let
   B = assembleλmatrix(FToλstarts, vstarts, EToF, FToB, locfactors, D, FbarT)
   B2 = (B + B')/2
   @assert B2 ≈ B
-  (perm_B, s_B) = metis_perm(B2)
-  B2_p = B2[perm_B, perm_B]
+  # (perm_B, s_B) = metis_perm(B2)
+  # B2_p = B2[perm_B, perm_B]
 
   # Monolithic system
   M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   A = [M FbarT'; FbarT Diagonal(D)]
   A2 = (A + A')/2
-  @assert A2 ≈ A
-  (perm_A, s_A) = metis_perm(A2)
-  A2_p = A2[perm_A, perm_A]
+  # @assert A2 ≈ A
+  # (perm_A, s_A) = metis_perm(A2)
+  # A2_p = A2[perm_A, perm_A]
 
   # Displacement system
   M = blockdiag(ntuple(i->lop[i].M̃, length(lop))...)
   C = M - FbarT' * Diagonal(1 ./ D) * FbarT
   C2 = (C + C')/2
-  @assert C2 ≈ C
-  (perm_C, s_C) = metis_perm(C2)
-  C2_p = C2[perm_C, perm_C]
+  # @assert C2 ≈ C
+  # (perm_C, s_C) = metis_perm(C2)
+  # C2_p = C2[perm_C, perm_C]
 
   # Single block Displacement system
   Np = (N1 + 1)*(N0 + 1)
   G = M[1:Np, 1:Np]
   G2 = (G + G')/2
-  @assert G2 ≈ G
-  (perm_G, s_G) = metis_perm(G2)
-  G2_p = G2[perm_G, perm_G]
+  #  @assert G2 ≈ G
+  #  (perm_G, s_G) = metis_perm(G2)
+  #  G2_p = G2[perm_G, perm_G]
 
-  println("flops for trace system inverse:        $(compute_flops(s_B)[2])")
-  println("flops for monolithic system inverse:   $(compute_flops(s_A)[2])")
-  println("flops for displacement system inverse: $(compute_flops(s_C)[2])")
-  println("flops for single block inverse:        $(compute_flops(s_G)[2])")
-  println("flops for all single block inverse:    $(nelems * compute_flops(s_G)[2])")
-  println("flops for hybridized inverse:          $(nelems * compute_flops(s_G)[2] + compute_flops(s_B)[2])")
+  # println("flops for trace system inverse:        $(compute_flops(s_B)[2])")
+  # println("flops for monolithic system inverse:   $(compute_flops(s_A)[2])")
+  # println("flops for displacement system inverse: $(compute_flops(s_C)[2])")
+  # println("flops for single block inverse:        $(compute_flops(s_G)[2])")
+  # println("flops for all single block inverse:    $(nelems * compute_flops(s_G)[2])")
+  # println("flops for hybridized inverse:          $(nelems * compute_flops(s_G)[2] + compute_flops(s_B)[2])")
+
+  begin
+    flops_monolithic   = compute_flops2(A2)
+    flops_trace        = compute_flops2(B2)
+    flops_displacement = compute_flops2(C2)
+    flops_single_block = compute_flops2(G2)
+    println("flops for monolithic system inverse:   $(flops_monolithic)")
+    println("flops for displacement system inverse: $(flops_displacement)")
+    println("flops for trace system inverse:        $(flops_trace)")
+    println("flops for single block inverse:        $(flops_single_block)")
+    println("flops for all single block inverse:    $(nelems * flops_single_block)")
+    println("flops for hybridized inverse:          $(nelems * flops_single_block + flops_trace)")
+  end
+
 end
 nothing
