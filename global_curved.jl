@@ -446,6 +446,7 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   C̃3 =  (Ss0 + Ss0T) + (Es0 ⊗ (crs0 * Qr + QrT * crs0)) + (Es0 ⊗ (τ3 * H3))
   C̃4 = -(SsN + SsNT) - (EsN ⊗ (crsN * Qr + QrT * crsN)) + (EsN ⊗ (τ4 * H4))
 
+  # TODO: Fix minus sign (reverse of the paper)
   G1 = -(Is ⊗ er0T) * Sr0 - ((csr0 * Qs) ⊗ er0T)
   G2 = +(Is ⊗ erNT) * SrN + ((csrN * Qs) ⊗ erNT)
   G3 = -(es0T ⊗ Ir) * Ss0 - (es0T ⊗ (crs0 * Qr))
@@ -460,10 +461,12 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   HfI_F2T = H2I * G2 - (τ2 ⊗ erN')
   HfI_F3T = H3I * G3 - (es0' ⊗ τ3)
   HfI_F4T = H4I * G4 - (esN' ⊗ τ4)
-  HfI_G1T = H1I * G1
-  HfI_G2T = H2I * G2
-  HfI_G3T = H3I * G3
-  HfI_G4T = H4I * G4
+
+  HfI_G1 = H1I * G1
+  HfI_G2 = H2I * G2
+  HfI_G3 = H3I * G3
+  HfI_G4 = H4I * G4
+
   M̃ = Ã + C̃1 + C̃2 + C̃3 + C̃4
 
   # Modify the operator to handle the boundary conditions
@@ -489,7 +492,7 @@ function locoperator(p, Nr, Ns, metrics=create_metrics(p,Nr,Ns),
   (M̃ = M̃,
    F = (F1, F2, F3, F4),
    HfI_FT = (HfI_F1T, HfI_F2T, HfI_F3T, HfI_F4T),
-   HfI_GT = (HfI_G1T, HfI_G2T, HfI_G3T, HfI_G4T),
+   HfI_G = (HfI_G1, HfI_G2, HfI_G3, HfI_G4),
    coord = metrics.coord,
    facecoord = metrics.facecoord,
    JH = JH,
@@ -563,6 +566,33 @@ end
 #}}}
 
 #{{{ volbcarray()
+function locbcarray_mod!(ge, lop, LFToB, bc_Dirichlet, bc_Neumann,
+                     bcargs = ())
+  F = lop.F
+  (xf, yf) = lop.facecoord
+  Hf = lop.Hf
+  sJ = lop.sJ
+  nx = lop.nx
+  ny = lop.ny
+  τ = lop.τ
+  ge[:] .= 0
+  for lf = 1:4
+    if LFToB[lf] == BC_DIRICHLET
+      vf = bc_Dirichlet(lf, xf[lf], yf[lf], bcargs...)
+    elseif LFToB[lf] == BC_NEUMANN
+      gN = bc_Neumann(lf, xf[lf], yf[lf], nx[lf], ny[lf], bcargs...)
+      vf = sJ[lf] .* gN ./ diag(τ[lf])
+    elseif LFToB[lf] == BC_LOCKED_INTERFACE
+      continue # nothing to do here
+    else
+      error("invalid bc")
+    end
+    ge[:] -= F[lf] * vf
+  end
+end
+
+
+#{{{ volbcarray()
 function locbcarray!(ge, gδe, lop, LFToB, bc_Dirichlet, bc_Neumann, in_jump,
                      bcargs = ())
   F = lop.F
@@ -594,6 +624,17 @@ end
 #}}}
 
 #{{{ computetraction
+function computetraction_mod(lop, lf, u, δ)
+  HfI_FT = lop.HfI_FT[lf]
+  τf = lop.τ[lf]
+  sJ = lop.sJ[lf]
+
+
+  return (HfI_FT * u + τf * (δ .- δ / 2)) ./ sJ
+end
+
+
+#{{{ computetraction
 function computetraction(lop, lf, u, λ, δ)
   HfI_FT = lop.HfI_FT[lf]
   τf = lop.τ[lf]
@@ -602,7 +643,6 @@ function computetraction(lop, lf, u, λ, δ)
   return (HfI_FT * u + τf * (λ .- δ / 2)) ./ sJ
 end
 #}}}
-
 
 #{{{ volsourcearray()
 function locsourcearray!(ge, source, lop, volargs = ())
@@ -614,8 +654,6 @@ function locsourcearray!(ge, source, lop, volargs = ())
 end
 
 #}}}
-
-
 
 #{{{
 struct SBPLocalOperator1{T<:Real, S<:Factorization}
@@ -690,9 +728,12 @@ function bcstarts(FToB, FToE, FToLF, bctype, Nr, Ns)
 end
 
 function LocalToGLobalRHS!(b, g, gδ, u, M, FbarT, vstarts)
-  for e = 1:length(M)
-    @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
-                                             g[vstarts[e]:(vstarts[e+1]-1)])
+  u .= 0
+  @inbounds for e = 1:length(M)
+    if maximum(abs.(g[vstarts[e]:(vstarts[e+1]-1)])) > 0
+      @views u[vstarts[e]:(vstarts[e+1]-1)] = (M[e] \
+                                               g[vstarts[e]:(vstarts[e+1]-1)])
+    end
   end
   mul!(b, FbarT, u)
   @. b = gδ - b
@@ -921,9 +962,11 @@ function plot_connectivity(verts, EToV)
   Lx = (floor(Int, Lx[1]), ceil(Int, Lx[2]))
   Ly = extrema(verts[2,:])
   Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
-  plt = Plot(BrailleCanvas(80, 40,
+  width = Lx[2] - Lx[1]
+  height = Ly[2] - Ly[1]
+  plt = Plot(BrailleCanvas(80, ceil(Int, 40 * height / width),
                            origin_x = Lx[1], origin_y = Ly[1],
-                           width = Lx[2] - Lx[1], height = Ly[2] - Ly[1]))
+                           width = width, height = height))
 
 
   annotate!(plt, :l, nrows(plt.graphics), string(Ly[1]), color = :light_black)
@@ -954,9 +997,11 @@ function plot_blocks(lop)
   Lx = (floor(Int, Lx[1]), ceil(Int, Lx[2]))
   Ly = (floor(Int, Ly[1]), ceil(Int, Ly[2]))
 
-  plt = Plot(BrailleCanvas(80, 40,
+  width = Lx[2] - Lx[1]
+  height = Ly[2] - Ly[1]
+  plt = Plot(BrailleCanvas(80, ceil(Int, 40 * height / width),
                            origin_x = Lx[1], origin_y = Ly[1],
-                           width = Lx[2] - Lx[1], height = Lx[2] - Lx[1]))
+                           width = width, height = height))
 
 
   annotate!(plt, :l, nrows(plt.graphics), string(Ly[1]), color = :light_black)
@@ -981,4 +1026,50 @@ function plot_blocks(lop)
   end
   title!(plt, "mesh")
   display(plt)
+end
+
+function rateandstate(V, psi, σn, ϕ, η, a, V0)
+  Y = (1 ./ (2 .* V0)) .* exp.(psi ./ a)
+  f = a .* asinh.(V .* Y)
+  dfdV  = a .* (1 ./ sqrt.(1 + (V .* Y).^2)) .* Y
+
+  g    = σn .* f    + η .* V - ϕ
+  dgdV = σn .* dfdV + η
+  (g, dgdV)
+end
+
+function newtbndv(func, xL, xR, x; ftol = 1e-6, maxiter = 500, minchange=0,
+                  atolx = 1e-4, rtolx = 1e-4)
+  (fL, _) = func(xL)
+  (fR, _) = func(xR)
+  if fL .* fR > 0
+    return (typeof(x)(NaN), typeof(x)(NaN), -maxiter)
+  end
+
+  (f, df) = func(x)
+  dxlr = xR - xL
+
+  for iter = 1:maxiter
+    dx = -f / df
+    x  = x + dx
+
+    if x < xL || x > xR || abs(dx) / dxlr < minchange
+      x = (xR + xL) / 2
+      dx = (xR - xL) / 2
+    end
+
+    (f, df) = func(x)
+
+    if f * fL > 0
+      (fL, xL) = (f, x)
+    else
+      (fR, xR) = (f, x)
+    end
+    dxlr = xR - xL
+
+    if abs(f) < ftol && abs(dx) < atolx + rtolx * (abs(dx) + abs(x))
+      return (x, f, iter)
+    end
+  end
+  return (x, f, -maxiter)
 end
